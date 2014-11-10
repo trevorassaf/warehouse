@@ -34,6 +34,11 @@ require_once(dirname(__FILE__)."/exceptions/InvalidUniqueKeyException.php");
 *			- protected genAncillaryDbVars()
 */
 abstract class DatabaseObject extends AccessLayerObject {
+  // -- CLASS CONSTANTS
+  const ID_KEY = "id"; 
+  const CREATED_KEY = "created"; 
+  const LAST_UPDATED_TIME = "last_updated";
+  
 // -- CLASS VARIABLES
   /**
    * String containing name for this database.
@@ -54,8 +59,13 @@ abstract class DatabaseObject extends AccessLayerObject {
    */
   protected static $uniqueKeys = array();
 
-// -- STATIC FUNCTIONS
-	public static function fetchAllObjectsFromTable() {
+  private
+    $id,
+    $createdTime,
+    $lastUpdatedTime;
+
+  // -- STATIC FUNCTIONS
+  public static function fetchAllObjectsFromTable() {
     $arrays = static::$database->fetchAllArraysFromTable(static::$table_name);
     $db_objects = array();
     foreach ($arrays as $array) {
@@ -72,11 +82,21 @@ abstract class DatabaseObject extends AccessLayerObject {
    * @throws DuplicateDbCreationViolation 
 	 */
   public static function createObject($init_params) {
+    // Add temporal bookkeeping data
+    $current_time = self::genDateTime();
+    $init_params[self::CREATED_KEY] = $current_time;
+    $init_params[self::LAST_UPDATE_TIME_KEY] = $current_time;
+    
     // Generate db query
     $query = static::genCreateObjectQuery($init_params);
+    
     // Insert into db	
     static::$database->query($query);
-    return new static($init_params, true);
+   
+    // Deserialize record
+    $obj = new static($init_params, true);
+    $obj->id = mysql_insert_id();
+    return $obj;
   }
   	
 	/**
@@ -113,11 +133,18 @@ abstract class DatabaseObject extends AccessLayerObject {
    * @param key: string representing db table key.
    */
   protected static function isUniqueKey($key) {
+    // Id is a primary key => unique key
+    if ($key == ID_KEY) {
+      return true;
+    }
+
+    // Search through user-defined unique keys
     foreach (static::$uniqueKeys as $unique_key) {
       if ($key == $unique_key) {
         return true;
       }
     }
+
     return false;
   }
   
@@ -174,6 +201,36 @@ abstract class DatabaseObject extends AccessLayerObject {
     return $ret_str;
 	}
 
+// -- STATIC FUNCTIONS
+	/** 
+  *  Function: Return instance of calling base class.
+	*/
+	public static function fetchById($id) {
+          $init_query = self::genRowSelectQueryWithId($id);
+          $record = self::$database->fetchArrayFromQuery($init_query);
+          return new static($record);
+	}
+	
+	/** 
+  *  Function: Return true iff a database object exists with the specified id.
+	*/
+	public static function canFetchById($id) {
+          $init_query = self::genRowSelectQueryWithId($id);
+          $record = self::$database->query($init_query);
+          return 1 == $db->numRows($record);
+	}
+	
+	/** 
+  *  Function: Return query string
+	*/
+	public static function genRowSelectQueryWithId($id) {
+          return "SELECT * FROM " . self::$tableName . " WHERE " . DB_ID_KEY . "=$id";
+  }
+
+  public static function genDateTime() {
+    return date("Y-m-d H:i:s");
+  }
+  
 // -- CONSTRUCTOR
 	/**
    * Initialize object with params. CAUTION: this function should be called only on params fetched
@@ -187,34 +244,27 @@ abstract class DatabaseObject extends AccessLayerObject {
     if ($is_new_object) {
       $init_params = $this->createObjectCallback($init_params);
     }
-    $this->initInstanceVars($init_params);
+    $this->initParentInstanceVars($init_params);
   }
 
-// -- STATIC FUNCTIONS
-	/** 
-  *  Function: Return instance of calling base class.
-	*/
-	public static function fetchDbObjectById($id) {
-          $init_query = self::genRowSelectQueryWithId($id);
-          $record = self::$database->fetchArrayFromQuery($init_query);
-          return new static($record); // may be problematic
-	}
-	
-	/** 
-  *  Function: Return true iff a database object exists with the specified id.
-	*/
-	public static function doesDbObjectExistWithId($id) {
-          $init_query = self::genRowSelectQueryWithId($id);
-          $record = self::$database->query($init_query);
-          return 1 == $db->numRows($record);
-	}
-	
-	/** 
-  *  Function: Return query string
-	*/
-	public static function genRowSelectQueryWithId($id) {
-          return "SELECT * FROM " . self::$tableName . " WHERE " . DB_ID_KEY . "=$id";
-	}
+  protected function getParentDbFields() {
+    $parent_db_fields = array(
+      self::ID_KEY => $this->id,
+      self::CREATED_KEY => $this->createdTime,
+      self::LAST_UPDATED_TIME => $this->lastUpdatedTime,
+    );
+
+    $child_db_fields = $this->getDbFields();
+    $db_fields = array_merge($parent_db_fields, $child_db_fields);
+    return $db_fields;
+  }
+
+  protected function initParentInstanceVars($init_params) {
+    $this->id = $init_params[self::ID_KEY];
+    $this->createdTime = $init_params[self::CREATED_KEY];
+    $this->lastUpdatedTime = $init_params[self::LAST_UPDATED_TIME];
+    $this->initInstanceVars($init_params);
+  }
 
 // -- ABSTRACT METHODS
   /**
@@ -229,11 +279,6 @@ abstract class DatabaseObject extends AccessLayerObject {
    * (string:key => prim:value).
    */
   protected abstract function getDbFields(); 
-
-  /**
-   * Returns map of primary keys for this db table. (string:key => prim:value)
-   */
-  protected abstract function getPrimaryKeys();
 
   /**
    * Callback that runs after object is created.
@@ -258,7 +303,8 @@ abstract class DatabaseObject extends AccessLayerObject {
    */
   public function save() {
     // Get db fields for this object
-    $vars = $this->getDbFields();
+    $vars = $this->getParentDbFields();
+    $vars[self::LAST_UPDATED_TIME] = self::genDateTime();
 
     // Prepare save query
 		$save_query = "UPDATE " . static::$tableName . " SET ";
@@ -277,13 +323,19 @@ abstract class DatabaseObject extends AccessLayerObject {
    */
   private function genPrimaryKeyWhereClause() {
     // Get unique keys
-    $unique_keys = $this->getPrimaryKeys(); 
-    $query = "WHERE ";
-    foreach ($unique_keys as $key => $value) {
-      $query .= $key . " = '" . $value . "' AND ";  
-    }
-    $query = substr($query, 0, strlen($query) - 5);
-    return $query;
+    return "WHERE ".self::ID_KEY."=".$this->id;
+  }
+
+  public function getId() {
+    return $this->id;
+  }
+
+  public function getCreatedTime() {
+    return $this->createdTime;
+  }
+
+  public function getLastUpdatedTime() {
+    return $this->lastUpdatedTime;
   }
 }
 ?>
