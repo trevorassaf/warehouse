@@ -79,26 +79,27 @@ abstract class DatabaseObject extends AccessLayerObject {
    * Insert object into database and return model.
    * 
    * @param init_params: map of params (string:param_name => string:value).
-   * @throws DuplicateDbCreationViolation 
 	 */
   public static function createObject($init_params) {
-    // Add temporal bookkeeping data
-    $current_time = self::genDateTime();
-    $init_params[self::CREATED_KEY] = $current_time;
-    $init_params[self::LAST_UPDATE_TIME_KEY] = $current_time;
-    
+    return new static($init_params, true);
+  }
+  	
+  private function insertRecord($init_params) {
+    // Set temporal bookkeeping data
+    $this->createdTime = self::genDateTime();
+    $this->lastUpdatedTime = $this->createdTime;
+
     // Generate db query
     $query = static::genCreateObjectQuery($init_params);
     
     // Insert into db	
     static::$database->query($query);
-   
-    // Deserialize record
-    $obj = new static($init_params, true);
-    $obj->id = mysql_insert_id();
+
+    // Fetch id 
+    $this->id = mysql_insert_id();
     return $obj;
   }
-  	
+
 	/**
    *  Fetch object from db by unique key.
    *
@@ -241,9 +242,17 @@ abstract class DatabaseObject extends AccessLayerObject {
    * @param init_params: map of instance vars for the object (string:key => prim:value)
    */
   protected function __construct($init_params, $is_new_object = false) {
+    // Handle creation of new record
     if ($is_new_object) {
-      $init_params = $this->createObjectCallback($init_params);
+      // Initialize child field only. Parent fields haven't 
+      // been computed yet (happens on insertion)
+      $this->initInstanceVars($init_params);
+      $this->validateOrThrow();
+      $this->insertRecord($init_params);
+      return;
     }
+
+    // Handle fetch of existing record
     $this->initParentInstanceVars($init_params);
   }
 
@@ -263,6 +272,8 @@ abstract class DatabaseObject extends AccessLayerObject {
     $this->id = $init_params[self::ID_KEY];
     $this->createdTime = $init_params[self::CREATED_KEY];
     $this->lastUpdatedTime = $init_params[self::LAST_UPDATED_TIME];
+
+    // Init child instance vars
     $this->initInstanceVars($init_params);
   }
 
@@ -280,10 +291,7 @@ abstract class DatabaseObject extends AccessLayerObject {
    */
   protected abstract function getDbFields(); 
 
-  /**
-   * Callback that runs after object is created.
-   */
-  protected function createObjectCallback($init_params) {}
+  protected abstract function validateOrThrow();
 
 // -- PUBLIC METHODS
   /**
@@ -302,6 +310,9 @@ abstract class DatabaseObject extends AccessLayerObject {
    * Save object to db.
    */
   public function save() {
+    // Validate fields
+    $this->validateOrThrow();
+
     // Get db fields for this object
     $vars = $this->getParentDbFields();
     $vars[self::LAST_UPDATED_TIME] = self::genDateTime();
