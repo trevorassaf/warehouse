@@ -3,11 +3,18 @@
 // -- DEPENDENCIES
 require_once("ModelObject.php");
 
-class DtCategories extends ModelObject {
+class DtCategoryError {
+  const UNA = 0x00;
+  const DNA = 0x01;
+}
+
+class DtCategory extends ModelObject {
 
   const NAME_KEY = "name";
 
   protected static $uniqueKeys = array(self::NAME_KEY);
+
+  protected static $tableName = "DtCategories";
 
   private $name;
 
@@ -26,6 +33,17 @@ class DtCategories extends ModelObject {
     return array(
       self::NAME_KEY => $this->name,
     );
+  }
+
+  protected function validateOrThrow() {
+    if (!isset($this->name)) {
+      throw new InvalidObjectStateException(DtCategoryError::UNA);
+    }
+
+    $category = static::fetchByName($this->name);
+    if (isset($category) && $category->getId() != $this->getId()) {
+      throw new InvalidObjectStateException(DtCategoryError::DNA);
+    }
   }
 
   protected function initInstanceVars($params) {

@@ -8,6 +8,6 @@ defined("DB_USER_NAME") ? null : define("DB_USER_NAME", "trevor");
 // Define Password
 defined("DB_PASSWORD") ? null : define("DB_PASSWORD", "password");
 // Define Database
-defined("DB_NAME") ? null : define("DB_NAME", "delphi");
+defined("DB_NAME") ? null : define("DB_NAME", "warehouse");
 
 ?>

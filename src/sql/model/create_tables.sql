@@ -85,9 +85,9 @@ CREATE TABLE WhUsers(
   last_updated DATETIME NOT NULL,
   first_name VARCHAR(20) NOT NULL,
   last_name VARCHAR(20) NOT NULL,
-  password VARCHAR(40) NOT NULL,
-  username VARCHAR(20) NOT NULL,
-  email VARCHAR(20) NOT NULL
+  password VARCHAR(40) NOT NULL UNIQUE,
+  username VARCHAR(20) NOT NULL UNIQUE,
+  email VARCHAR(40) NOT NULL UNIQUE
 );  
 
 /**
@@ -155,7 +155,6 @@ CREATE TABLE WhTables(
  *        Note: 'is_unique' and 'is_foreign_key' can't be true at the same time
  *    - allows_null: specifies that the field is not null. Note: this can't
  *        be true if 'is_unique' is true.
- *    - category: foreign-key to the category of datatype used
  *    - table_id: foreign key to the warehouse table that this column is 
  *        part of.
  */
@@ -166,12 +165,10 @@ CREATE TABLE WhColumns(
   name VARCHAR(20) NOT NULL,
   length INT,
   is_unique TINYINT NOT NULL,
-  is_foregin_key TINYINT NOT NULL,
+  is_foreign_key TINYINT NOT NULL,
   allows_null TINYINT NOT NULL,
-  category_id INT NOT NULL,
   table_id INT NOT NULL,
   dt_id INT NOT NULL,
-  FOREIGN KEY(category_id) REFERENCES DtCategories(id),
   FOREIGN KEY(table_id) REFERENCES WhTables(id),
   FOREIGN KEY(dt_id) REFERENCES DbDataTypes(id)
 );  

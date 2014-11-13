@@ -2,6 +2,7 @@
 // -- DEPENDENCIES
 require_once(dirname(__FILE__)."/AccessLayerObject.php");
 require_once(dirname(__FILE__)."/exceptions/InvalidUniqueKeyException.php");
+require_once(dirname(__FILE__)."/exceptions/InvalidObjectStateException.php");
 
 /** -- CLASS DEFINITION
 *   Description:
@@ -89,6 +90,9 @@ abstract class DatabaseObject extends AccessLayerObject {
     $this->createdTime = self::genDateTime();
     $this->lastUpdatedTime = $this->createdTime;
 
+    $init_params[self::CREATED_KEY] = $this->createdTime;
+    $init_params[self::LAST_UPDATED_TIME] = $this->lastUpdatedTime;
+
     // Generate db query
     $query = static::genCreateObjectQuery($init_params);
     
@@ -175,7 +179,13 @@ abstract class DatabaseObject extends AccessLayerObject {
   private static function genGetAllObjectsByParamsQuery($params) {
     $query = "SELECT * FROM " . static::$tableName . " WHERE ";
     foreach ($params as $k => $v) {
-      $query .= $k ."='".$v."' AND ";
+      $query .= $k .'=';
+      if (is_string($v)) {
+        $query .= "'".$v."'";
+      } else {
+        $query .= $v;  
+      }
+      $query .= ' AND ';
     }
     $query = substr($query, 0, -5);
     return $query;
@@ -191,8 +201,12 @@ abstract class DatabaseObject extends AccessLayerObject {
 		$values_string = ") VALUES (";
 		foreach ($init_params as $key => $value) {
       $query .= $key . ", ";
+      if ($value === false) {
+        $value = 0;
+      }
+      
       $escaped_value = mysql_escape_string($value);
-			$values_string .= "'$escaped_value', "; 
+      $values_string .= "'$escaped_value', "; 
 		}
 		// Trim terminal commas from strings
 		$query = substr($query, 0, strlen($query) - 2);
@@ -207,28 +221,32 @@ abstract class DatabaseObject extends AccessLayerObject {
   *  Function: Return instance of calling base class.
 	*/
 	public static function fetchById($id) {
-          $init_query = self::genRowSelectQueryWithId($id);
-          $record = self::$database->fetchArrayFromQuery($init_query);
-          return new static($record);
+    $init_query = self::genRowSelectQueryWithId($id);
+    $record = self::$database->fetchArrayFromQuery($init_query);
+    if ($record == null) {
+      return null; 
+    }
+    return new static($record);
 	}
 	
 	/** 
   *  Function: Return true iff a database object exists with the specified id.
 	*/
 	public static function canFetchById($id) {
-          $init_query = self::genRowSelectQueryWithId($id);
-          $record = self::$database->query($init_query);
-          return 1 == $db->numRows($record);
+    $init_query = self::genRowSelectQueryWithId($id);
+    $record = self::$database->query($init_query);
+    return 1 == $db->numRows($record);
 	}
 	
 	/** 
   *  Function: Return query string
 	*/
 	public static function genRowSelectQueryWithId($id) {
-          return "SELECT * FROM " . self::$tableName . " WHERE " . DB_ID_KEY . "=$id";
+    return "SELECT * FROM " . static::$tableName . " WHERE " . self::ID_KEY . "=$id";
   }
 
   public static function genDateTime() {
+    date_default_timezone_set("America/Chicago");
     return date("Y-m-d H:i:s");
   }
   
