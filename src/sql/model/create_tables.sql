@@ -60,8 +60,8 @@ CREATE TABLE DbDataTypes(
   name VARCHAR(20) NOT NULL,
   accepts_length TINYINT NOT NULL,
   requires_length TINYINT NOT NULL,
-  default_length SMALLINT, -- set only if accepts_length is false. size is in bytes
-  maximum_length SMALLINT,   
+  default_length INT, -- set only if accepts_length is false. size is in bytes
+  maximum_length INT,   
   category_id INT NOT NULL,
   db_id INT NOT NULL,
   PRIMARY KEY(id),

@@ -28,6 +28,14 @@ class DtCategory extends ModelObject {
     return static::getObjectByUniqueKey(self::NAME_KEY, $name);
   }
 
+  public static function createIfNonExtant($name) {
+    $cat = static::fetchByName($name);
+    if ($cat == null) {
+      $cat = static::create($name);
+    }
+    return $cat;
+  }
+
   // Override
   protected function getDbFields() {
     return array(

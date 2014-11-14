@@ -2,6 +2,7 @@
 
 // -- DEPENDENCIES
 require_once("ModelObject.php");
+require_once(dirname(__FILE__)."/DbDataType.php");
 
 class SupportedDbError {
   const UNA = 0x00;
@@ -50,13 +51,21 @@ class SupportedDb extends ModelObject {
     $this->name = $params[self::NAME_KEY];
   }
 
-  // Assocs
-  public function getDataTypes() {
-    return DbDataTypes::fetchByDbId($this->getId());
+  protected function deleteChildren() {
+    $data_types = $this->getDataTypes();
+    foreach ($data_types as $dt) {
+      $dt->delete();
+      unset($dt);
+    }
   }
 
   // Getters
   public function getName() {
     return $this->name;
+  }
+
+  // Assocs
+  public function getDataTypes() {
+    return DbDataType::fetchForSupportedDb($this->getId()); 
   }
 }

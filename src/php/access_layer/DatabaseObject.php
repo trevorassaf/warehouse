@@ -67,14 +67,23 @@ abstract class DatabaseObject extends AccessLayerObject {
 
   // -- STATIC FUNCTIONS
   public static function fetchAllObjectsFromTable() {
-    $arrays = static::$database->fetchAllArraysFromTable(static::$table_name);
+    $arrays = static::$database->fetchAllArraysFromTable(static::$tableName);
     $db_objects = array();
     foreach ($arrays as $array) {
       $db_object = new static($array);
-      $db_objects[] = $object;
+      $db_objects[] = $db_object;
     }
     return $db_objects;
   }
+  
+  public static function deleteAll() {
+    $objects = static::fetchAllObjectsFromTable();
+    foreach ($objects as $obj) {
+      $obj->delete();
+      unset($obj);
+    }  
+  }
+
   
   /**
    * Insert object into database and return model.
@@ -200,6 +209,9 @@ abstract class DatabaseObject extends AccessLayerObject {
     $query = "INSERT INTO " . static::$tableName . " (";
 		$values_string = ") VALUES (";
 		foreach ($init_params as $key => $value) {
+      if ($value === null) {
+        continue;
+      }
       $query .= $key . ", ";
       if ($value === false) {
         $value = 0;
@@ -311,18 +323,22 @@ abstract class DatabaseObject extends AccessLayerObject {
 
   protected abstract function validateOrThrow();
 
+  protected function deleteChildren() {}
+
 // -- PUBLIC METHODS
   /**
    * Delete object from db.
    */
   public function delete() {
+    $this->deleteChildren();
+
 		// Construct delete query
     $delete_query = "DELETE FROM " . static::$tableName  . " "
       . $this->genPrimaryKeyWhereClause();
     // Execute delete query
     self::$database->query($delete_query);
-	}
-  
+  }
+
 // -- PROTECTED METHODS
   /**
    * Save object to db.

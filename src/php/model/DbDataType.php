@@ -93,7 +93,7 @@ class DbDataType extends ModelObject {
       return static::createObject($fields);
   }
 
-  public static function fetchDataTypesForSupportedDb($db_id) {
+  public static function fetchForSupportedDb($db_id) {
     return static::getObjectsByParams(
       array(
         self::DB_ID_KEY => $db_id,
@@ -102,7 +102,6 @@ class DbDataType extends ModelObject {
   }
 
   protected function validateOrThrow() {
-
     // Name must be set  
     if (!isset($this->name)) {
       throw new InvalidObjectStateException(DbDataTypeError::UNAME);
@@ -135,6 +134,7 @@ class DbDataType extends ModelObject {
 
     // Default must be non-null if requires-length is false
     if (!$this->requiresLength && !isset($this->defaultLength)) {
+      var_dump($this);
       throw new InvalidObjectStateException(DbDataTypeError::UDL);
     }
 
@@ -167,7 +167,7 @@ class DbDataType extends ModelObject {
     }
 
     // Ensure that no 2 data-types in the same db have the same name
-    $db_data_types = static::fetchDataTypesForSupportedDb($this->dbId);
+    $db_data_types = static::fetchForSupportedDb($this->dbId);
     foreach ($db_data_types as $dt) {
       if ($dt->getName() == $this->name && $dt->getId() != $this->getId()) {
         throw new InvalidObjectStateException(DbDataTypeError::DNA);
