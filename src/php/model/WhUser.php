@@ -4,18 +4,22 @@
 require_once(dirname(__FILE__)."/ModelObject.php");
 
 class WhUserError {
-  const UFN = 0x00;
-  const ULN = 0x01;
-  const UPW = 0x02;
-  const UUN = 0x03;
-  const UEM = 0x04;
-  const DPW = 0x05;
-  const DUN = 0x06;
-  const DEM = 0x07;
+  // Unsets
+  const UFN = "Unset first name";
+  const ULN = "Unset last name";
+  const UPW = "Unset password";
+  const UUN = "Unset username";
+  const UEM = "Unset email";
+
+  // Duplicates
+  const DPW = "Duplicate password";
+  const DUN = "Duplicate username";
+  const DEM = "Duplicate email";
 }
 
 class WhUser extends ModelObject {
-  
+
+  // Db keys 
   const FIRST_NAME_KEY = "first_name";
   const LAST_NAME_KEY = "last_name";
   const PASSWORD_KEY = "password";
@@ -83,6 +87,7 @@ class WhUser extends ModelObject {
   }
 
   protected function validateOrThrow() {
+    // Unsets
     if (!isset($this->firstName)) {
       throw new InvalidObjectStateException(WhUserError::UFN);
     }
@@ -103,7 +108,7 @@ class WhUser extends ModelObject {
       throw new InvalidObjectStateException(WhUserError::UEM);
     }
 
-    // Guard against unique key duplication
+    // Duplicates
     $user = WhUser::fetchByUsername($this->username);
     if (isset($user) && $user->getId() != $this->getId()) {
       throw new InvalidObjectStateException(WhUserError::DUN);

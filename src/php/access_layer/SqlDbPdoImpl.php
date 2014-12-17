@@ -1,19 +1,22 @@
 <?php
 // -- REQUIRES
-require_once("MySqlDatabaseConfig.php");
+require_once("SqlDbConfig.php");
 
-class MySqlDatabase {
+class SqlDatabase {
 // -- INSTANCE VARIABLES
-	private $connection;
-	private $previous_query;
-	private $magic_quotes_active;
-	private $real_escape_string_exists;
+  private 
+    $connection,
+    $previous_query,
+    $magic_quotes_active,
+    $real_escape_string_exists,
+    $sqlDbConfig;
 
 // -- CONSTRUCTOR
-	/* Constructor: initiate connection with mysql database
-	*
-	*/
-	function __construct() {
+  /**
+   * Create connection to db
+   */
+  function __construct($sql_db_config) {
+    $this->sqlDbConfig = $sql_db_config;
 		$this->openConnection();
 		// Check for magic quotes capability
 		$this->magic_quotes_active = get_magic_quotes_gpc();
@@ -106,7 +109,13 @@ class MySqlDatabase {
 	*
 	*/
 	public function openConnection() {
-		$this->connection = mysql_connect(DB_SERVER, DB_USER_NAME, DB_PASSWORD);
+    // Reuse existing connection, if available
+    if (isset($this->connection)) {
+      return; 
+    }
+
+    $this->connection = new PDO();
+    $this->connection = mysql_connect(DB_SERVER, DB_USER_NAME, DB_PASSWORD);
 		if (!$this->connection) {
 			die ("ERROR: MySql connection failed: " . mysql_error());
 		}

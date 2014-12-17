@@ -153,6 +153,7 @@ CREATE TABLE WhTables(
  *    - is_foreign_key: specifies that the field is a foreign key 
  *        to another table in the same warhouse app. 
  *        Note: 'is_unique' and 'is_foreign_key' can't be true at the same time
+ *    - foreign_table_id: specifies id of table that the foreign key references.
  *    - allows_null: specifies that the field is not null. Note: this can't
  *        be true if 'is_unique' is true.
  *    - table_id: foreign key to the warehouse table that this column is 
@@ -166,6 +167,7 @@ CREATE TABLE WhColumns(
   length INT,
   is_unique TINYINT NOT NULL,
   is_foreign_key TINYINT NOT NULL,
+  foreign_table_id INT NOT NULL,
   allows_null TINYINT NOT NULL,
   table_id INT NOT NULL,
   dt_id INT NOT NULL,

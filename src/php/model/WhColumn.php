@@ -6,30 +6,38 @@ require_once(dirname(__FILE__)."/WhTable.php");
 require_once(dirname(__FILE__)."/DbDataType.php");
 
 abstract class WhColumnError {
-  const UNA = 0x00;
-  const ULN = 0x01;
-  const UIU = 0x02;
-  const UIF = 0x03;
-  const UAN = 0x04;
-  const UTI = 0x06;
-  const UDI = 0x07;
+  // Unset fields
+  const UNA = "Unset name";
+  const ULN = "Unset length";
+  const UIU = "Unset is-unique-col";
+  const UIF = "Unset is-foreign-key";
+  const UFT = "Unset foreign-table-id";
+  const UAN = "Unset allows-null";
+  const UTI = "Unset table-id";
+  const UDI = "Unset datatype-id";
 
-  const ITI = 0x08;
-  const IDI = 0x09;
+  // Invalid IDs
+  const ITI = "Invalid table-id";
+  const IDI = "Invalid datatype-id";
+  const IFT = "Invalid foreign-table-id";
 
-  const DNA = 0x10;
+  // Duplicates
+  const DNA = "Duplicate name";
 }
 
 class WhColumn extends ModelObject {
 
+  // Db keys
   const NAME_KEY = "name";
   const LENGTH_KEY = "length";
   const IS_UNIQUE_KEY = "is_unique";
   const IS_FOREIGN_KEY = "is_foreign_key";
+  const FOREIGN_TABLE_ID = "foreign_table_id";
   const ALLOWS_NULL_KEY = "allows_null";
   const TABLE_ID_KEY = "table_id";
   const DT_ID_KEY = "dt_id";
 
+  // Table name
   protected static $tableName = "WhColumns";
 
   private
@@ -37,6 +45,7 @@ class WhColumn extends ModelObject {
     $length,
     $isUnique,
     $isForeignKey,
+    $foreignTableId,
     $allowsNull,
     $tableId,
     $dtId;
@@ -46,6 +55,7 @@ class WhColumn extends ModelObject {
     $length,
     $is_unique,
     $is_foreign_key,
+    $foreign_table_id,
     $allows_null,
     $table_id,
     $dt_id
@@ -56,6 +66,7 @@ class WhColumn extends ModelObject {
         self::LENGTH_KEY => $length,
         self::IS_UNIQUE_KEY => $is_unique,
         self::IS_FOREIGN_KEY => $is_foreign_key,
+        self::FOREIGN_TABLE_ID => $foreign_table_id,
         self::ALLOWS_NULL_KEY => $allows_null,
         self::TABLE_ID_KEY => $table_id,
         self::DT_ID_KEY => $dt_id,
@@ -77,6 +88,7 @@ class WhColumn extends ModelObject {
       self::LENGTH_KEY => $this->length,
       self::IS_UNIQUE_KEY => $this->isUnique,
       self::IS_FOREIGN_KEY => $this->isForeignKey,
+      self::FOREIGN_TABLE_ID => $this->foreignTableId,
       self::ALLOWS_NULL_KEY => $this->allowsNull,
       self::TABLE_ID_KEY => $this->tableId,
       self::DT_ID_KEY => $this->dtId,
@@ -88,12 +100,14 @@ class WhColumn extends ModelObject {
     $this->length = $params[self::LENGTH_KEY];
     $this->isUnique = $params[self::IS_UNIQUE_KEY];
     $this->isForeignKey = $params[self::IS_FOREIGN_KEY];
+    $this->foreignTableId = $params[self::FOREIGN_TABLE_ID];
     $this->allowsNull = $params[self::ALLOWS_NULL_KEY];
     $this->tableId = $params[self::TABLE_ID_KEY];
     $this->dtId = $params[self::DT_ID_KEY];
   }
 
   protected function validateOrThrow() {
+    // Check for unset fields
     if (!isset($this->name)) {
       throw new InvalidObjectStateException(WhColumnError::UNA);
     }
@@ -129,10 +143,22 @@ class WhColumn extends ModelObject {
       throw new InvalidObjectStateException(WhColumnError::IDI);
     }
 
+    // Check duplicate column name
     $table_columns = static::fetchColumnsForTable($this->tableId);
     foreach ($table_columns as $col) {
       if ($col->getName() == $this->name && $col->getId() != $this->getId()) {
         throw new InvalidObjectStateException(WhColumnError::DNA);
+      }
+    }
+
+    // Unset and invalid foreign key
+    if ($this->isForeignKey) {
+      if (!isset($this->foreignTableId)) {
+        throw new InvalidObjectStateException(WhColumnError::UFT);
+      }
+      $foreign_table = WhTable::fetchById($this->foreignTableId);
+      if (!isset($foreign_table)) {
+        throw new InvalidObjectStateException(WhColumnError::IFT);
       }
     }
   }
@@ -153,6 +179,10 @@ class WhColumn extends ModelObject {
     return $this->isForeignKey;
   }
 
+  public function getForeignTableId() {
+    return $this->foreignTableId;
+  }
+
   public function getAllowsNull() {
     return $this->allowsNull;
   }
@@ -165,5 +195,3 @@ class WhColumn extends ModelObject {
     return $this->dtId;
   }
 }
-
-
