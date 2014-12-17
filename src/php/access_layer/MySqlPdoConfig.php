@@ -169,7 +169,7 @@ final class MySqlDbConfig extends PdoConfig {
     switch ($this->connectionType) {
       case MySqlConnectionType::REMOTE_HOST:
         $dsn_map[self::DSN_PORT_KEY] = $this->port;
-      case MySqlConnectionType::LOCALHOST:
+      case MySqlConnectionType::LOCALHOST: /* Default port */
         $dsn_map[self::DSN_HOST_KEY] = $this->hostName;
         break;
       case MySqlConnectionType::UNIX_SOCKET:
