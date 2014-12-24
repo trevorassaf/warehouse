@@ -1,6 +1,6 @@
 <?php
 
-abstract class DbTiers extends Enum {
+abstract class DbTier extends Enum {
 
   const DB_TIER_DELIMITER = '_';
 

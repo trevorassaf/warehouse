@@ -40,9 +40,9 @@ abstract class PdoConfig {
    */
   private function genDsn() {
     $dsn_map = $this->genDsnMap();
-    $dsn = self::$DSN_PREFIX . ":";
+    $dsn = static::$DSN_PREFIX . ":";
     foreach ($dsn_map as $k => $v) {
-      $dsn .= $k . "=" . $v . ";" 
+      $dsn .= $k . "=" . $v . ";";
     }
     return $dsn;
   }
@@ -54,7 +54,6 @@ abstract class PdoConfig {
     if (!isset($this->dsn)) {
       $this->dsn = $this->genDsn();
     }
-
     return $this->dsn;
   }
 }

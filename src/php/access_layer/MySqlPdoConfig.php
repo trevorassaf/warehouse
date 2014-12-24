@@ -2,16 +2,8 @@
 
 // -- DEPENDENCIES
 require_once(dirname(__FILE__)."/Enum.php");
-require_once(dirname(__FILE__)."/DbTiers.php");
+require_once(dirname(__FILE__)."/DbTier.php");
 require_once(dirname(__FILE__)."/PdoConfig.php");
-
-// Define mysql database connection constants
-// Define Server
-defined("DB_SERVER") ? null : define("DB_SERVER", "127.0.0.1");
-// Define Username
-defined("DB_USER_NAME") ? null : define("DB_USER_NAME", "trevor");
-// Define Password
-defined("DB_PASSWORD") ? null : define("DB_PASSWORD", "password");
 
 abstract class MySqlDbCharSet extends Enum {
   // PDO char-set prefix
@@ -52,7 +44,7 @@ abstract class MySqlConnectionType extends Enum {
  * Immutable class representing configuration info for
  * MySql PDO db connection.
  */
-final class MySqlDbConfig extends PdoConfig {
+final class MySqlPdoConfig extends PdoConfig {
 
   // DSN keys
   const DSN_HOST_KEY = "host";
@@ -79,7 +71,7 @@ final class MySqlDbConfig extends PdoConfig {
     $host_name,
     $port,
     $unix_socket,
-    $user_name,
+    $username,
     $password,
     $char_set,
     $db_name,
@@ -94,17 +86,17 @@ final class MySqlDbConfig extends PdoConfig {
       throw new RuntimeException("Must set 'password' in MySQl PDO configuration");
     }
 
-    MySqlDbCharSet::validateType($charSet);
-    if (!isset($charSet)) {
+    MySqlDbCharSet::validateType($char_set);
+    if (!isset($char_set)) {
       throw new RuntimeException("Must set 'charSet' in MySQl PDO configuration");
     }
 
-    if (!isset($dbName)) {
+    if (!isset($db_name)) {
       throw new RuntimeException("Must set 'dbName' in MySQl PDO configuration");
     }
 
-    DbTiers::validateType($dbTier);
-    if (!isset($dbTier)) {
+    DbTier::validateType($db_tier);
+    if (!isset($db_tier)) {
       throw new RuntimeException("Must set 'dbTier' in MySQl PDO configuration");
     }
 
@@ -152,12 +144,12 @@ final class MySqlDbConfig extends PdoConfig {
         throw new RuntimeException("Invalid db connection type.");
     }
 
-    $this->userName = $user_name;
+    $this->userName = $username;
     $this->password = $password;
     $this->charSet = $char_set;
     $this->dbName = $db_name;
     $this->dbTier = $db_tier;
-    $this->dbNameWithTier = DbTiers::genDbNameWithTier($db_name, $db_tier);
+    $this->dbNameWithTier = DbTier::genDbNameWithTier($db_name, $db_tier);
   }
 
   protected function genDsnMap() {
@@ -186,20 +178,20 @@ final class MySqlDbConfig extends PdoConfig {
     return $this->userName;
   }
 
-  public funcion getPassword() {
+  public function getPassword() {
     return $this->password;
   }
 
   public function getOptions() {
     return array(
-      PDO::MYSQL_ATTR_INIT_COMMAND => MySqlPdoConfig::genPdoCharSetStr($this->charSet),
+      PDO::MYSQL_ATTR_INIT_COMMAND => MySqlDbCharSet::genPdoCharSetStr($this->charSet),
       PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
       PDO::ATTR_EMULATE_PREPARES => false,
     );
   }
 }
 
-final class MySqlPdoConfigBuilder extends Builder {
+final class MySqlPdoConfigBuilder {
   
   private
     $connectionType,
@@ -215,7 +207,7 @@ final class MySqlPdoConfigBuilder extends Builder {
   public function build() {
     return new MySqlPdoConfig(
       $this->connectionType,
-      $this->host,
+      $this->hostName,
       $this->port,
       $this->unixSocket,
       $this->username,
@@ -246,8 +238,8 @@ final class MySqlPdoConfigBuilder extends Builder {
     return $this;
   }
 
-  public function setUserName($username) {
-    $this->userName = $username;
+  public function setUsername($username) {
+    $this->username = $username;
     return $this;
   }
 
@@ -262,7 +254,7 @@ final class MySqlPdoConfigBuilder extends Builder {
   }
 
   public function setDbName($db_name) {
-    $this->dbName = $dbName;
+    $this->dbName = $db_name;
     return $this;
   }
 

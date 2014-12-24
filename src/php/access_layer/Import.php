@@ -1,7 +1,8 @@
 <?php
 
-// -- DEPENDENCIES FOR WAREHOUSE 
-require_once("DatabaseObject.php");
+// -- WAREHOUSE DEPENDENCIES
+require_once("PdoConfig.php");
+require_once("MySqlPdoConfig.php");
+require_once("MySqlPdoFactory.php");
+require_once("PdoFactory.php");
 require_once("AccessLayerObject.php");
-require_once("MySqlDatabase.php");
-require_once("MySqlDatabaseConfig.php");

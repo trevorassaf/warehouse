@@ -4,43 +4,12 @@ require_once(dirname(__FILE__)."/AccessLayerObject.php");
 require_once(dirname(__FILE__)."/exceptions/InvalidUniqueKeyException.php");
 require_once(dirname(__FILE__)."/exceptions/InvalidObjectStateException.php");
 
-/** -- CLASS DEFINITION
-*   Description:
-*     - Base class of all objects that can be represented as records in a db table.
-*         Control of record insertion, retrieval, and deletion reside here. The constructor   
-*         expects that the corresponding record resides in the db.
-*
-*   Instructions for sub-classes:
-*     - REQUIRED:
-*         - define "db_name" class variable with name of the db in which the tables reside.
-*         - define "table_name" class variable with name of the table in which records reside.
-*         - implement abstract methods:
-*             - initAncillaryVars($init_params):
-*                 - initialize all instance variables from key/value pairs in $init_params.
-*                     NOTE: do not initialize "id," "created," or "updated."
-*                 - $init_params is a dictionary containing all fields from db record.
-*             - genAncillaryDbVars():
-*                 - return dictionary containing all db keys mapped to corresponding 
-*                     instance vars. NOTE: do not include "id," "created," "updated."
-*     - OPTIONAL:
-*         - define "unique_keys" class variable with array containing the names of all
-*             fields that are considered "unique." NOTE: do not include "id" as a 
-*             unique field; this "unique_keys" is for programmatically defined unique 
-*             keys only!
-*         - call $this->save() whenever instance variables are modified. 
-*
-*	@abstract
-*		- DatabaseObject:
-*			- protected initAncillaryDbVars($init_params)
-*			- protected genAncillaryDbVars()
-*/
-abstract class DatabaseObject extends AccessLayerObject {
+abstract class SqlRecord extends AccessLayerObject {
   // -- CLASS CONSTANTS
   const ID_KEY = "id"; 
   const CREATED_KEY = "created"; 
   const LAST_UPDATED_TIME = "last_updated";
   
-// -- CLASS VARIABLES
   /**
    * String containing name for this database.
    * 
@@ -66,8 +35,8 @@ abstract class DatabaseObject extends AccessLayerObject {
     $lastUpdatedTime;
 
   // -- STATIC FUNCTIONS
-  public static function fetchAllObjectsFromTable() {
-    $arrays = static::$database->fetchAllArraysFromTable(static::$tableName);
+  public static function fetchAllSqlRecords() {
+    $arrays = static::$database->fetchAllTuplesFromTable(static::$tableName);
     $db_objects = array();
     foreach ($arrays as $array) {
       $db_object = new static($array);
@@ -83,36 +52,16 @@ abstract class DatabaseObject extends AccessLayerObject {
       unset($obj);
     }  
   }
-
   
   /**
    * Insert object into database and return model.
    * 
    * @param init_params: map of params (string:param_name => string:value).
 	 */
-  public static function createObject($init_params) {
+  public static function createRecord($init_params) {
     return new static($init_params, true);
   }
   	
-  private function insertRecord($init_params) {
-    // Set temporal bookkeeping data
-    $this->createdTime = self::genDateTime();
-    $this->lastUpdatedTime = $this->createdTime;
-
-    $init_params[self::CREATED_KEY] = $this->createdTime;
-    $init_params[self::LAST_UPDATED_TIME] = $this->lastUpdatedTime;
-
-    // Generate db query
-    $query = static::genCreateObjectQuery($init_params);
-    
-    // Insert into db	
-    static::$database->query($query);
-
-    // Fetch id 
-    $this->id = mysql_insert_id();
-    return $obj;
-  }
-
 	/**
    *  Fetch object from db by unique key.
    *
@@ -284,6 +233,20 @@ abstract class DatabaseObject extends AccessLayerObject {
 
     // Handle fetch of existing record
     $this->initParentInstanceVars($init_params);
+  }
+
+  /**
+   * insertRecord()
+   * - Transform 'init_params' into record. 
+   */
+  private function insertRecord($init_params) {
+    // Insert into db	
+    $query = static::genCreateObjectQuery($init_params);
+    static::$database->query($query);
+
+    // Fetch id 
+    $this->id = mysql_insert_id();
+    return $obj;
   }
 
   protected function getParentDbFields() {
