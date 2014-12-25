@@ -5,105 +5,239 @@ require_once(dirname(__FILE__)."/exceptions/InvalidUniqueKeyException.php");
 require_once(dirname(__FILE__)."/exceptions/InvalidObjectStateException.php");
 
 abstract class SqlRecord extends AccessLayerObject {
-  // -- CLASS CONSTANTS
+  
+  // Db Keys
   const ID_KEY = "id"; 
   const CREATED_KEY = "created"; 
   const LAST_UPDATED_TIME = "last_updated";
   
   /**
-   * String containing name for this database.
-   * 
-   * @requires must be defined by subclasses.
-   */
-  protected static $dbName;
-  
-  /**
    * String containing name for this table.
-   *
    * @requires must be defined by subclasses.
    */
   protected static $tableName;
   
   /**
-   * List of unique keys for this table. Empty array => no unique keys.
+   * List of alternate keys for this table. 'id' is always the primary key
+   * and needn't be included in this list.
    */
-  protected static $uniqueKeys = array();
+  protected static $alternateKeys = array();
+
+  /**
+   * List of composite keys for this table.
+   */
+  protected static $compositeKey = array();
+
+  /**
+   * Handle to the database connection.
+   */
+  private static $databaseHandle = null;
+
+  /**
+   * Table of cached prepared statements that were created during this transaction. 
+   */
+  private static $cachedPreparedStatements = null;
 
   private
     $id,
     $createdTime,
     $lastUpdatedTime;
 
-  // -- STATIC FUNCTIONS
-  public static function fetchAllSqlRecords() {
-    $arrays = static::$database->fetchAllTuplesFromTable(static::$tableName);
-    $db_objects = array();
-    foreach ($arrays as $array) {
-      $db_object = new static($array);
-      $db_objects[] = $db_object;
-    }
-    return $db_objects;
-  }
-  
-  public static function deleteAll() {
-    $objects = static::fetchAllObjectsFromTable();
-    foreach ($objects as $obj) {
-      $obj->delete();
-      unset($obj);
-    }  
-  }
-  
   /**
-   * Insert object into database and return model.
-   * 
-   * @param init_params: map of params (string:param_name => string:value).
-	 */
-  public static function createRecord($init_params) {
+   * beginTx()
+   * - Initiate database connection and start a transaction.
+   * @requires non-existant database connection
+   */
+  public static function beginTx($connection_type=null) {
+    // Fail due to existing transaction
+    assert(isset(self::$databaseHandle));
+    assert(isset(self::$cachedPreparedStatements));
+
+    // Initialize db connection and cached prepared statement table
+    try {
+      self::$databaseHandle = static::$databaseFactory->createConnection($connection_type);
+      self::$cachedPreparedStatements = array();
+      self::$databaseHandle->beginTransaction();
+    } catch (PDOException $e) {
+      die("\nERROR: " . $e->getMessage() . "\n");
+    }
+  }
+
+  /**
+   * endTx()
+   * - Close transaction and end database connection.
+   * @requires existing database connection
+   */
+  public static function endTx() {
+    // Fail due to non-existant transaction
+    assert(!isset(self::$databaseHandle));
+    assert(!isset(self::$cachedPreparedStatements));
+
+    // Close connection and cached prepared statement table
+    try {
+      self::$databaseHandle = null;
+      self::$cachedPreparedStatements = null;
+    } catch (PDOException $e) {
+      die("\nERROR: " . $e->getMessage() . "\n");
+    }
+  }
+
+  /**
+   * fetchAll()
+   * - Atomically fetch all records from table associated 
+   *   with calling class.
+   */
+  public static function fetchAll() {
+    // Create query string
+    $query_str = "SELECT * FROM :table_name";
+
+    try {
+      // Create and cache prepared statement, if it doesn't already exist
+      if (!isset(self::$cachedPreparedStatements[$query_str])) {
+        self::$cachedPreparedStatements[$query_str] = $dbh->prepare($query_str);
+      }
+      $stmt = self::$cachedPreparedStatements[$query_str]; 
+
+      // Fetch all records 
+      $stmt->bindValue(":table_name", static::$tableName, PDO::PARAM_STR);
+      $stmt->execute();
+      $raw_record_set = $stmt->fetchAll();
+
+      // Extrude raw records to objects
+      $record_objects = array();
+      foreach ($raw_record_set as $raw_record) {
+        $record_objects[] = new static($raw_record); 
+      }
+
+      return $record_objects;
+    } catch (PDOException $e) {
+      die("\nERROR: " . $e->getMessage() . "\n");
+    }
+  }
+
+  /**
+   * deleteAll()
+   * - Atomically truncate table associated with the calling class.
+   */
+  public static function deleteAll() {
+    try {
+      $sql_records = static::fetchAll();
+      foreach ($sql_records as $record) {
+        $record->delete();
+      } 
+    } catch (PDOException $e) {
+      die("\nERROR: " . $e->getMessage() . "\n");
+    }
+  }
+
+  /**
+   * insert()
+   * @Override AccessLayerObject
+   */
+  public static function insert($init_params) {
     return new static($init_params, true);
+  }
+
+  /**
+   * fetchByCompositeKey()
+   * - Fetch sql record from db by composite key.
+   */
+  protected static function fetchByCompositeKey($composite_key) {
+    // Fail due to invalid composite key
+    assert(static::isValidCompositeKey($composite_key));
+
+    // Fetch object
+    $results = static::fetchByParams($composite_key);
+
+    // Return null, because query didn't match any record
+    $num_results = count($results);
+    if ($num_results == 0) {
+      return null;
+    } 
+
+    // Return single sql record.
+    if ($num_results == 1) {
+      return $results[0];
+    } 
+
+    // Failed due to composite key misuse 
+    assert(false);
   }
   	
 	/**
-   *  Fetch object from db by unique key.
-   *
-   *  @param unique_key_map: map of unique key (string:key_name => string:value)
-   *  @throws InvalidUniqueKeyException 
+   * fetchByUniqueKey()
+   * - Fetch sql record from db by key.
    */
-  protected static function getObjectByUniqueKey($key, $value) {
-    // Verify key is unique
-    if (!static::isUniqueKey($key)) {
-      throw new InvalidUniqueKeyException($key);
-    }
+  protected static function fetchByKey($key, $value) {
+    // Fail due to invalid alternate key
+    assert(static::isValidKey($key));
 
     // Fetch object
-    $results = static::getObjectsByParams(
+    $results = static::fetchByParams(
       array($key => $value)
     );
 
-    // Return result
+    // Return null, because query didn't match any record
     $num_results = count($results);
+    if ($num_results == 0) {
+      return null;
+    } 
+
+    // Return single sql record.
     if ($num_results == 1) {
       return $results[0];
-    } else if ($num_results == 0) {
-      return null;
-    } else {
-      throw new InvalidUniqueKeyException();
-    }
+    } 
+
+    // Failed due to alternate key misuse 
+    assert(false);
   }
 
   /**
-   * Return true iff $key is a unique key for this object.
-   *
-   * @param key: string representing db table key.
+   * isValidKey()
+   * - Return true iff key is a candidate key for this object.
+   * @param key : string representing db table key
    */
-  protected static function isUniqueKey($key) {
-    // Id is a primary key => unique key
-    if ($key == ID_KEY) {
+  private static function isValidKey($key) {
+    // Return true if 'key' corresponds to the primary key 
+    if ($key == self::ID_KEY) {
       return true;
     }
 
-    // Search through user-defined unique keys
-    foreach (static::$uniqueKeys as $unique_key) {
-      if ($key == $unique_key) {
+    // Return true if 'key' is valid alternate key
+    foreach (static::$alternateKeys as $alternate_key) {
+      if ($key == $alternate_key) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * isValidCompositeKey()
+   * - Return true iff 'composite_key' is valid composite key.
+   */
+  private static function isValidCompositeKey($composite_key) {
+    $count_composite_key = count($composite_key);
+    foreach (static::$compositeKeys as $valid_composite_key) {
+      // Skip if the number of elements don't match
+      if ($count_composite_key != count($valid_composite_key)) {
+        continue;
+      }
+
+      // Check if the elements in the provided composite key
+      // match the elements in this valid composite key
+      $num_matched_keys = 0;
+      foreach ($valid_composite_key as $vck_element) {
+        foreach ($composite_key as $ck_element) {
+          if ($vck_element == $ck_element) {
+            ++$num_matched_keys;
+          }
+        }   
+      }
+
+      // Return true because the composite key is valid 
+      if ($num_matched_keys == $count_composite_key) {
         return true;
       }
     }
@@ -112,21 +246,39 @@ abstract class SqlRecord extends AccessLayerObject {
   }
   
   /** 
-   * Fetch from db all objects with fields matching those in $params.
-   *
-   * @param map of parameters (string:key => prim:value)
+   * fetchByParams()
+   * - Fetch all records matching 'params'. Records fetched from table
+   *   associated with calling class.
+   * @param params : Map(string:key => prim:value)
    */
-	protected static function getObjectsByParams($params) {
+	protected static function fetchByParams($params) {
 		// Generate db query
-		$query = self::genGetAllObjectsByParamsQuery($params);
-    // Retrieve from db
-		$records = static::$database->fetchArraysFromQuery($query);
-		// Instantiate objects and populate array
-    $objects = array();
-    foreach ($records as $record) {
-      $objects[] = new static($record);
-    }
-	  return $objects;
+    $query_str = self::genFetchByParamsQuery($params);
+
+    try {
+      // Create and cache prepared statement, if it doesn't already exist 
+      if (!isset(self::$cachedPreparedStatements[$query_str])) {
+        self::$cachedPreparedStatements[$query_str] = $dbh->prepare($query_str);
+      }
+      $stmt = self::$cachedPreparedStatements[$query_str]; 
+
+      // Fetch record
+      foreach ($params as $key => $value) {
+        $key_for_prepared_key = PDOFactory::transformForPreparedStatement($key); 
+        $stmt->bindValue($key_for_prepared_key, $value->getValue(), $value->getType());
+      }
+      $stmt->execute();
+      
+      // Extrude raw records to objects
+      $raw_record_set = $stmt->fetchAll();
+      foreach ($raw_record_set as $raw_record) {
+        $record_objects[] = new static($raw_record); 
+      }
+      
+      return $record_objects;
+    } catch (PDOException $e) {
+      die("\nERROR: " . $e->getMessage() . "\n");
+    } 
   }
 
   /**
@@ -292,8 +444,9 @@ abstract class SqlRecord extends AccessLayerObject {
   /**
    * Delete object from db.
    */
-  public function delete() {
+  private function deleteWithoutTx() {
     $this->deleteChildren();
+    $this->deleteAssets();
 
 		// Construct delete query
     $delete_query = "DELETE FROM " . static::$tableName  . " "
