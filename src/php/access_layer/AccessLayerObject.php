@@ -7,14 +7,14 @@ abstract class AccessLayerObject {
   /**
    * Factory for generating db connections.
    */ 
-  private static $databaseFactory;
+  public static $databaseFactory;
 
   /**
    * insert() 
    * - Insert object into database and return model.
    * - @param init_params: map of params (string:param_name => string:value).
 	 */
-  public static function insert($init_params);
+  public abstract static function insert($init_params);
 
   /**
    * save()
