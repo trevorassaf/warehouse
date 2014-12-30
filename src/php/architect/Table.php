@@ -11,7 +11,7 @@ class Table {
    * - Ctor for Table.
    */
   public function __construct($name) {
-    $this->name;
+    $this->name = $name;
     $this->columnMap = array();
   }
 
@@ -30,7 +30,10 @@ class Table {
    * @param column : Column
    */
   public function addColumn($column) {
+    // Fail because column already registered
     assert(!isset($this->columnMap[$column->getName()])); 
+
+    $this->columnMap[$column->getName()] = $column;
   }
 
   /**

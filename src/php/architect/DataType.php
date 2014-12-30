@@ -54,35 +54,35 @@ final class DataType {
     $name,
     $argRequirement;
 
-  public function createInt() {
+  public function int() {
     if (!isset(self::$intDataType)) {
       self::$intDataType = new self(DataTypeName::INT, DataTypeArgRequirement::NONE);
     }
     return self::$intDataType;
   }
 
-  public function createUnsignedInt() {
+  public function unsignedInt() {
     if (!isset(self::$unsignedIntDataType)) {
       self::$unsignedIntDataType = new self(DataTypeName::UNSIGNED_INT, DataTypeArgRequirement::NONE);
     }
     return self::$unsignedIntDataType;
   }
 
-  public function createBool() {
+  public function bool() {
     if (!isset(self::$boolDataType)) {
       self::$boolDataType = new self(DataTypeName::BOOL, DataTypeArgRequirement::NONE);
     }
     return self::$boolDataType;
   }
 
-  public function createString() {
+  public function string() {
     if (!isset(self::$stringDataType)) {
       self::$stringDataType = new self(DataTypeName::STRING, DataTypeArgRequirement::REQUIRES_ONE);
     }
     return self::$stringDataType;
   }
 
-  public function createTimestamp() {
+  public function timestamp() {
     if (!isset(self::$timestampDataType)) {
       self::$timestampDataType = new self(DataTypeName::TIMESTAMP, DataTypeArgRequirement::NONE);
     }
