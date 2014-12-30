@@ -13,12 +13,12 @@ class MySqlPdoFactory extends PdoFactory {
    * createConnection()
    * @Override PdoFactory
    */
-  public function createConnection($req_type=null) {
+  protected function createConnection($req_type=null) {
     // TODO: add load balancing logic based on request type 
     if (isset($req_type)) {
       throw new Exception("No support for req type specification at this time."); 
     }
-
+    
     // Open new db connection
     return new PDO(
       $this->mySqlConfig->getDsn(), 

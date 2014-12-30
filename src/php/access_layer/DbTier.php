@@ -1,5 +1,7 @@
 <?php
 
+require_once(dirname(__FILE__)."/../util/Import.php")
+
 abstract class DbTier extends Enum {
 
   const DB_TIER_DELIMITER = '_';

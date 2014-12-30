@@ -4,18 +4,29 @@ require_once(dirname(__FILE__)."/AccessLayerObject.php");
 require_once(dirname(__FILE__)."/exceptions/InvalidUniqueKeyException.php");
 require_once(dirname(__FILE__)."/exceptions/InvalidObjectStateException.php");
 
+/**
+ * Represents row in a sql table.
+ *
+ * Child class definitions:
+ *   @requires class name matches table name 
+ * 
+ * Vars:
+ *   @requires defines 'alternateKeys' to indicate alternate keys 
+ *   @requires defines 'compositeKeys' to indicate composite keys
+ * 
+ * Functions:
+ *   @requires defines 'getDbFields()' for additional db fields
+ *   @requires defines 'initInstanceVars()' for additional db fields
+ *   @requires defines 'validateOrThrow()' to add validation logic
+ *   @requires defines 'deleteChildren()' for records connected by foreign key
+ *   @requires defines 'deleteAssets()' for records associated with other data outisde of db
+ */
 abstract class SqlRecord extends AccessLayerObject {
   
   // Db Keys
   const ID_KEY = "id"; 
   const CREATED_KEY = "created"; 
   const LAST_UPDATED_TIME = "last_updated";
-  
-  /**
-   * String containing name for this table.
-   * @requires must be defined by subclasses.
-   */
-  protected static $tableName;
   
   /**
    * List of alternate keys for this table. 'id' is always the primary key
@@ -34,43 +45,42 @@ abstract class SqlRecord extends AccessLayerObject {
   private static $databaseHandle = null;
 
   /**
-   * These two connection ids are used collectively in order to 
-   * maintain synchronization between db connections and prepared
-   * statements. 'connectionId' is associated with the SqlRecord
-   * class and 'connectionSyncId' is associated with each
-   * subclass of SqlRecord. 'connectionId' is incremented each
-   * time a new database connection is established. When performing
-   * a database operation, a child class of SqlRecord compares its
-   * 'connectionSyncId' to 'connectionId'. Inequality indicates
-   * that a new database connection was made, thereby, invalidating
-   * the cached prepared statements. At this point, the child class
-   * must unset its existing prepared statements and spawn new ones
-   * from the new database connection.
-   *
-   * @requires child classes define 'connectionSyncId' as 0
+   * The number of times a transaction has been opened by the user.
+   * We only ever keep actual db transaction open. This pattern supports
+   * nested transactions subsumed into the global one. 
    */
-  private static $connectionId = 0;
-  protected static $connectionSyncId = 0;
+  private static $numTransactions = 0;
+
+  /**
+   * AssetDeletors scheduled for deletion at the next commit.
+   */
+  private static $assetDeletors = null;
 
   /**
    * Cached prepared statements applicable to all SqlRecord instances.
    */
-  protected static $fetchAllRecordsPreparedStatement = null;
-  protected static $fetchRecordPreparedStatement = null;
-  protected static $deleteRecordPreparedStatement = null;
-  protected static $saveRecordPreparedStatement = null;
-  protected static $insertRecordPreparedStatement = null;
+  private static $fetchAllRecordsPreparedStatementCache = null;
+  private static $deleteRecordPreparedStatementCache = null;
+  private static $saveRecordPreparedStatementCache = null;
+  private static $insertRecordPreparedStatementCache = null;
 
   /**
+
    * Cached prepared statements for fetching records from this table.
    * Map of string:query-str => PDOStatement:prepared-statement
    */
-  protected static $fetchRecordPreparedStatementsTable = null;
+  private static $fetchRecordPreparedStatementsCacheTable = null;
 
+  // Db Fields
   private
     $id,
     $createdTime,
     $lastUpdatedTime;
+
+  /**
+   * True iff 'delete' has been called on this instance.
+   */
+  private $hasBeenDeleted;
 
   /**
    * beginTx()
@@ -78,17 +88,30 @@ abstract class SqlRecord extends AccessLayerObject {
    * @requires non-existant database connection
    */
   public final static function beginTx($connection_type=null) {
-    // Fail due to existing database transaction 
+    // Fail due to invalid num-transactions
+    assert(self::$numTransactions >= 0);
+    
+    // Track number of transactions 
+    ++self::$numTransactions;
+
+    // Short circuit so that we never initiate more than 1 transaction 
+    if (self::$numTransactions > 1) {
+      return;
+    }
+    
+    // Fail due to pre-existing database transaction 
     assert(!isset(self::$databaseHandle));
 
-    // Initialize db connection
     try {
-      self::$databaseHandle = static::$databaseFactory->createConnection($connection_type);
-      ++self::$connectionId;
+      // Initialize db connection
+      self::$databaseHandle = parent::$databaseFactory->getConnection($connection_type);
       self::$databaseHandle->beginTransaction();
     } catch (PDOException $e) {
       die("\nERROR: " . $e->getMessage() . "\n");
     }
+       
+    // Initialize asset deletors
+    self::$assetDeletors = array();
   }
 
   /**
@@ -97,9 +120,21 @@ abstract class SqlRecord extends AccessLayerObject {
    * @requires existing database connection
    */
   public final static function endTx() {
+    // Fail due to calling endTx without initiating a transaction
+    assert(self::$numTransactions > 0);
+
+    // Track the number of transaction-close calls so we know when to
+    // close the actual db transaction.
+    --self::$numTransactions;
+
+    // Short circuit so we wait to close the encapsulating transaction
+    if (self::$numTransactions > 0) {
+      return;
+    }
+
     // Fail due to non-existant transaction
     assert(isset(self::$databaseHandle));
-    
+
     // Conclude transaction
     try {
       self::$databaseHandle->commit();
@@ -108,8 +143,17 @@ abstract class SqlRecord extends AccessLayerObject {
       die("\nERROR: " . $e->getMessage() . "\n");
     }
 
+    // Remove assets from file system.
+    self::deleteAssets();
+
     // Close connection 
     self::$databaseHandle = null;
+
+    // Invalidate prepared statement cache
+    self::$fetchAllRecordsPreparedStatementCache = null;
+    self::$deleteRecordPreparedStatementCache = null;
+    self::$insertRecordPreparedStatementCache = null;
+    self::$fetchRecordPreparedStatementsCacheTable = null;
   }
 
   /**
@@ -119,30 +163,47 @@ abstract class SqlRecord extends AccessLayerObject {
    * @return array of SqlRecords
    */
   public static function fetchAll() {
+    // Initialize fetch-all cache, if necessary
+    if (!isset(self::$fetchAllRecordsPreparedStatementCache)) {
+      self::$fetchAllRecordsPreparedStatementCache = array();
+    }
+
+    // Cache calling subclass name 
+    $called_class_name = get_called_class();
+    
+    // Begin implicit transaction if explicit one doesn't exist
+    $is_implicit_tx = false;
+    if (self::$numTransactions == 0) {
+      $is_implicit_tx = true; 
+      self::beginTx();
+    }
+    
     // Fail due to invalid database connection
     assert(isset(self::$databaseHandle));
 
-    // Ensure cache/db synchronization
-    static::ensurePreparedStatementCacheSync();
-
     try {
-      // Create prepared statement if non-existant 
-      if (!isset(static::$fetchAllRecordsPreparedStatement)) {
-        // Create query string
-        $query_str = "SELECT * FROM " . static::$tableName;
-        static::$fetchAllRecordsPreparedStatement = self::$databaseHandle->prepare($query_str); 
+      // Create prepared statement if nonextant 
+      if (!isset(self::$fetchAllRecordsPreparedStatementCache[$called_class_name])) {
+        $query_str = "SELECT * FROM " . $called_class_name;
+        self::$fetchAllRecordsPreparedStatement[$called_class_name] =
+            self::$databaseHandle->prepare($query_str); 
       } 
 
-      // Fetch all records 
-      static::$fetchAllRecordsPreparedStatement->execute();
-      $raw_record_set = static::$fetchAllRecordsPreparedStatement->fetchAll();
+      // Fetch all records
+      $fetch_all_stmt = self::$fetchAllRecordsPreparedStatementCache[$called_class_name]; 
+      $fetch_all_stmt->execute();
+      $raw_record_set = $fetch_all_stmt->fetchAll();
+      
+      // Conclude implicit tx
+      if ($is_implicit_tx) {
+        self::endTx();
+      }
 
       // Extrude raw records to objects
       $record_objects = array();
       foreach ($raw_record_set as $raw_record) {
         $record_objects[] = new static($raw_record); 
       }
-      
       return $record_objects;
     } catch (PDOException $e) {
       self::$databaseHandle->rollback();
@@ -155,11 +216,15 @@ abstract class SqlRecord extends AccessLayerObject {
    * - Atomically truncate table associated with the calling class.
    */
   public static function deleteAll() {
+    // Initiate implicit tx if explicit one doesn't exist
+    $is_implicit_tx = false;
+    if (self::$numTransactions == 0) {
+      $is_implicit_tx = true; 
+      self::beginTx();
+    }
+
     // Fail due to invalid database connection
     assert(isset(self::$databaseHandle));
-
-    // Ensure cache/db synchronization
-    static::ensurePreparedStatementCacheSync();
 
     try {
       $sql_records = static::fetchAll();
@@ -170,13 +235,18 @@ abstract class SqlRecord extends AccessLayerObject {
       self::$databaseHandle->rollback();
       die("\nERROR: " . $e->getMessage() . "\n");
     }
+
+    // Close implicit tx
+    if ($is_implicit_tx) {
+      self::endTx();
+    }
   }
 
   /**
    * insert()
    * @Override AccessLayerObject
    */
-  public static function insert($init_params) {
+  protected static function insert($init_params) {
     return new static($init_params, true);
   }
 
@@ -294,40 +364,62 @@ abstract class SqlRecord extends AccessLayerObject {
    * @param params : Map(string:key => Value:value)
    */
 	protected static function fetchByParams($params) {
-    // Fail due to invalid database connection
-    assert(isset(self::$databaseHandle));
-
-    // Ensure cache/db synchronization
-    static::ensurePreparedStatementCacheSync();
+    // Cache calling subclass name
+    $called_class_name = get_called_class();
     
     // Generate db query
     $query_str = self::genFetchByParamsQuery($params);
 
+    // Initialize cache, if necessary
+    if (!isset(self::$fetchRecordPreparedStatementsCacheTable)) {
+      self::$fetchRecordPreparedStatementsCacheTable = array();
+    }
+    
+    if (!isset(self::$fetchRecordPreparedStatementsCacheTable[$called_class_name])) {
+      self::$fetchRecordPreparedStatementsCacheTable[$called_class_name] = array();
+    }
+
+    // Cache fetch record
+    $fetch_record_cache = self::$fetchRecordPreparedStatementsCacheTable[$called_class_name];
+
+    // Initiate implicit transaction, if necessary
+    $is_implicit_tx = false;
+    if (self::$numTransactions == 0) {
+      $is_implicit_tx = true;
+      self::beginTx();
+    }
+    
+    // Fail due to invalid database connection
+    assert(isset(self::$databaseHandle));
+
     try {
       // Create prepared statement, if nonextant
-      if (!isset(static::$fetchRecordPreparedStatementsTable[$query_str])) {
-        static::$fetchRecordPreparedStatementsTable[$query_str] = 
-            self::$databaseHandle->prepare($query_str);
+      if (!isset($fetch_record_cache[$query_str])) {
+        $fetch_record_cache[$query_str] = self::$databaseHandle->prepare($query_str);
       }
 
       // Fetch record
-      $stmt = static::$fetchRecordPreparedStatementsTable[$query_str];
-      foreach ($params as $key => $value) {
-        $key_for_prepared_statement = self::transformForPreparedStatement($key); 
-        $stmt->bindValue(
+      $fetch_stmt = $fetch_record_cache[$query_str];
+      foreach ($params as $p) {
+        $key_for_prepared_statement = self::transformForPreparedStatement($p->getKeyName()); 
+        $fetch_stmt->bindValue(
             $key_for_prepared_statement,
-            $value->getValue(),
-            $value->getType()
+            $p->getValue(),
+            $p->getType()
         );
       }
-      $stmt->execute();
-      
+      $fetch_stmt->execute();
+      $raw_record_set = $fetch_stmt->fetchAll();
+
+      // Close implicit tx
+      if ($is_implicit_tx) {
+        self::endTx();
+      }
+
       // Extrude raw records to objects
-      $raw_record_set = $stmt->fetchAll();
       foreach ($raw_record_set as $raw_record) {
         $record_objects[] = new static($raw_record); 
       }
-      
       return $record_objects;
     } catch (PDOException $e) {
       self::$databaseHandle->rollback();
@@ -355,12 +447,13 @@ abstract class SqlRecord extends AccessLayerObject {
    * @return string : query string
    */
   private static function genFetchByParamsQuery($params) {
-    $query = "SELECT * FROM " . static::$tableName . " WHERE ";
-    foreach ($params as $key) {
-      $transformed_key_name = self::transformForPreparedStatement($key);
-      $query .= $key .'=' . $transformed_key_name;
+    $query = "SELECT * FROM " . get_called_class() . " WHERE ";
+    foreach ($params as $p) {
+      $transformed_key_name = self::transformForPreparedStatement($p->getKeyName());
+      $query .= $p->getKeyName() .'=' . $transformed_key_name;
       $query .= ' AND ';
     }
+    
     $query = substr($query, 0, -5);
     return $query;
   } 
@@ -372,23 +465,22 @@ abstract class SqlRecord extends AccessLayerObject {
    * @return string : query string
 	 */
   private static function genInsertRecordQuery($init_params) {
-    $query = "INSERT INTO " . static::$tableName . " (";
+    $query = "INSERT INTO " . get_called_class() . " (";
 		$values_string = ") VALUES (";
-		foreach ($init_params as $key => $value) {
+		foreach ($init_params as $param) {
       // Skip key if value is null
-      if ($value === null) {
+      if ($param->getValue() === null) {
         continue;
       }
-
-      // Accumulate key specification string
-      $query .= $key . ", ";
+      
+      $query .= $param->getKeyName() . ", ";
 
       // Accumulate value specification string with PDO param bindings 
-      $transformed_key_name = self::transformForPreparedStatement($key);
+      $transformed_key_name = self::transformForPreparedStatement($param->getKeyName());
       $values_string .= "'$transformed_key_name', "; 
 		}
     
-    // Trim terminal commas from strings
+    // Trim redundant commas from strings
 		$query = substr($query, 0, strlen($query) - 2);
 		$values_string = substr($values_string, 0, strlen($values_string) - 2);
     
@@ -402,43 +494,7 @@ abstract class SqlRecord extends AccessLayerObject {
    * @param id : unsigned int 
    */
   public static function fetchById($id) {
-    // Fail due to invalid database connection
-    assert(isset(self::$databaseHandle));
-
-    // Ensure cache/db synchronization
-    static::ensurePreparedStatementCacheSync();
-
-    try {
-      // Create prepared statement if non-existant
-      if (!isset(static::$fetchRecordPreparedStatement)) {
-        $fetch_query = "SELECT * FROM " . static::$tableName . " WHERE " 
-            . self::ID_KEY . "=" . self::transformForPreparedStatement(self::ID_KEY);
-        static::$fetchRecordPreparedStatement =
-            self::$databaseHandle->prepare($fetch_query); 
-      }  
-
-      // Fetch sql record
-      $transformed_id_key = self::transformForPreparedStatement(self::ID_KEY);
-      static::$fetchRecordPreparedStatement
-          ->bindValue($transformed_id_key, $id, PDO::PARAM_INT);
-      static::$fetchRecordPreparedStatement->execute();
-      $results = static::$fetchRecordPreparedStatement->fetchAll();
-      
-      // Return null because not elements found
-      if ($results == null || empty($results)) {
-        return null;
-      }
-
-      // Faile due to multiple records returned in 'id' fetch
-      if (count($results) > 1) {
-        die("Fetch by 'id' returned multiple records for " . static::$tableName);
-      }
-
-      return new static($results[0]);
-    } catch (PDOException $e) {
-      self::$databaseHandle->rollback();
-      die("\nERROR: " . $e->getMessage() . "\n");
-    } 
+    return static::fetchByKey(self::ID_KEY, $id);
 	}
   
   /**
@@ -446,19 +502,19 @@ abstract class SqlRecord extends AccessLayerObject {
    * - Initializes SqlRecord object. Inserts row if 'is_new_object' == true.
    * @param init_params: map of instance vars for the object (string:key => prim:value)
    */
-  protected function __construct($init_params, $is_new_object = false) {
-    // Handle creation of new record
+  protected function __construct($init_params, $is_new_object=false) {
+    // Inidicate this instance's association with stored db record 
+    $this->hasBeenDeleted = false;
+    
+    // Create new record if indicated by client, otherwise fetch
+    // from existing record
     if ($is_new_object) {
-      // Initialize child field only. Parent fields haven't 
-      // been computed yet (happens on insertion)
       $this->initInstanceVars($init_params);
       $this->validateOrThrow();
       $this->insertRecord($init_params);
-      return;
+    } else {
+      $this->initParentInstanceVars($init_params);
     }
-
-    // Handle fetch of existing record
-    $this->initParentInstanceVars($init_params);
   }
 
   /**
@@ -466,35 +522,53 @@ abstract class SqlRecord extends AccessLayerObject {
    * - Transform 'init_params' into record. 
    */
   private function insertRecord($init_params) {
+    // Initialize insert record cache, if nonextant
+    if (!isset(self::$insertRecordPreparedStatementCache)) {
+      self::$insertRecordPreparedStatementCache = array();
+    }
+
+    $called_class_name = get_called_class();
+
+    // Initiate implicit transaction, if no explicit transaction
+    $is_implicit_tx = false;
+    if (self::$numTransactions == 0) {
+      $is_implicit_tx = true;
+      self::beginTx();
+    }
+
     // Fail due to invalid database connection
     assert(isset(self::$databaseHandle));
 
-    // Ensure cache/db synchronization
-    static::ensurePreparedStatementCacheSync();
-
     try {
-      // Create prepared statement if non-existant
-      if (!isset(static::$insertRecordPreparedStatement)) {
+      // Create prepared statement if necessary 
+      if (!isset(self::$insertRecordPreparedStatementCache[$called_class_name])) {
         $insert_query = static::genInsertRecordQuery($init_params);
-        static::$insertRecordPreparedStatement = 
+        self::$insertRecordPreparedStatementCache[$called_class_name] = 
             self::$databaseHandle->prepare($insert_query);
       }
 
+      $insert_stmt = self::$insertRecordPreparedStatementCache[$called_class_name];
+
       // Bind params to query
       foreach ($init_params as $field) {
-        static::$insertRecordPreparedStatement
-          ->bindValue(
-              self::transformForPreparedStatement($field->getKey()),
-              $field->getValue(),
-              $field->getType());
+        $insert_stmt->bindValue(
+            self::transformForPreparedStatement($field->getKeyName()),
+            $field->getValue(),
+            $field->getType()
+        );
       }
 
       // Insert record
-      static::$insertRecordPreparedStatement->execute();
-      $this->id = static::$databaseHandle::lastInsertId(); 
+      $insert_stmt->execute();
+      $this->id = self::$databaseHandle->lastInsertId(); 
     } catch (PDOException $e) {
       self::$databaseHandle->rollback();
       die("\nERROR: " . $e->getMessage() . "\n");
+    }
+
+    // Close implicit transaction
+    if ($is_implicit_tx) {
+      self::endTx();
     }
   }
 
@@ -530,33 +604,114 @@ abstract class SqlRecord extends AccessLayerObject {
    * - Sets instance vars of object equal to corresponding parameters in $init_params.
    * @param init_params: map of instance vars for this object (string:key => prim:value)
    */
-  protected abstract function initInstanceVars($init_params);
+  protected function initInstanceVars($init_params) {}
   
   /**
    * getDbFields()
    * - Returns map of fields to insert into db. Map is derived from object's instance variables
    * (string:key => prim:value).
    */
-  protected abstract function getDbFields(); 
+  protected function getDbFields() { return array(); }
 
-  protected abstract function validateOrThrow();
+  /**
+   * validateOrThrow()
+   * - Throw exception if record is in invalid state.
+   */
+  protected function validateOrThrow() {}
 
+  /**
+   * deleteChildren()
+   * - Remove children records.
+   */
   protected function deleteChildren() {}
-  protected function deleteAssets() {}
+
+  /**
+   * getAssets()
+   * - Get assets for this instance.
+   * @return array(AssetDeletor)
+   */
+  protected function getAssets() { return array(); }
 
   /**
    * delete()
    * - Delete object from db.
    */
-  private function delete() {
-    $this->deleteChildren();
-    $this->deleteAssets();
+  public function delete() {
+    // Fail due to double delete
+    assert(!$this->hasBeenDeleted);
 
-		// Construct delete query
-    $delete_query = "DELETE FROM " . static::$tableName  . " "
-      . $this->genPrimaryKeyWhereClause();
-    // Execute delete query
-    self::$database->query($delete_query);
+    // Initialize delete record cache, if nonextant
+    if (!isset(self::$deleteRecordPreparedStatementCache)) {
+      self::$deleteRecordPreparedStatementCache = array();
+    }
+    
+    $called_class_name = get_called_class();
+
+    // Initiate implicit tx, if nonextant explicit tx 
+    $is_implicit_tx = false;
+    if (self::$numTransactions == 0) {
+      $is_implicit_tx = true; 
+      self::beginTx();
+    }
+
+    // Fail due to invalid database connection
+    assert(isset(self::$databaseHandle));
+    
+    try {
+      // Create delete recortd statement, if nonextant 
+      if (!isset(self::$deleteRecordPreparedStatementCache[$called_class_name])) {
+        $delete_query = "DELETE FROM " . $called_class_name  . " "
+            . $this->genPrimaryKeyWhereClause();
+        $delete_record_cache = self::$databaseHandle->prepare($delete_query);
+      }
+
+      $delete_record_stmt = self::$deleteRecordPreparedStatementCache[$called_class_name];
+      
+      // Delete children, schedule assets for deletion
+      $this->deleteChildren();
+      self::$assetDeletors = array_merge(self::$assetDeletors, $this->getAssets());
+
+      // Bind 'id'
+      $delete_record_stmt->bindValue(
+          self::transformForPreparedStatement(self::ID_KEY),
+          $this->id,
+          PDO::PARAM_INT
+      );
+
+      // Remove record
+      $delete_record_stmt->execute();
+    } catch (PDOException $e) {
+      self::$databaseHandle->rollback();
+      die("\nERROR: " . $e->getMessage() . "\n");
+    }
+
+    // Close implicit transaction
+    if ($is_implicit_tx) {
+      self::endTx();
+    }
+
+    // Indicate deletion of this instance
+    $this->hasBeenDeleted = true;
+  }
+
+  /**
+   * deleteAssets()
+   * - Remove assets from file system.
+   */
+  private static function deleteAssets() {
+    // Fail due to double delete
+    assert(!$this->hasBeenDeleted);
+
+    // Fail due to invalid asset deletors 
+    assert(isset(self::$assetDeletors));
+
+    // Remove assets 
+    foreach (self::$assetDeletors as $deletor) {
+      $deletor->delete();
+    }
+
+    // Clear AssetDeletors cache
+    self::$assetDeletors = array();
   }
 
   /**
@@ -564,42 +719,64 @@ abstract class SqlRecord extends AccessLayerObject {
    * - Update record associated with this instance.
    */
   public function save() {
-    // Fail due to invalid database connection
-    assert(isset(self::$databaseHandle));
-    
-    // Validate fields
+    // Fail due to attempting to save deleted record 
+    assert(!$this->hasBeenDeleted);
+
+    // Fail if fields are invalid
     $this->validateOrThrow();
 
-    // Ensure cache/db synchronization
-    static::ensurePreparedStatementCacheSync();
+    // Get db fields for this object
+    $record_fields = $this->getParentDbFields();
+
+    // Initialize save record cache, if necessary
+    if (!isset(self::$saveRecordPreparedStatementCache)) {
+      self::$saveRecordPreparedStatementCache = array();
+    }
+
+    $called_class_name = get_called_class();
+    
+    $is_implicit_tx = false;
 
     try {
-      // Get db fields for this object
-      $record_fields = $this->getParentDbFields();
-
       // Create save-record prepared statement if non-existant
-      if (!isset(static::$saveRecordPreparedStatement)) {
+      if (!isset(self::$saveRecordPreparedStatement[$called_class_name])) {
         // Create query string
         $save_query_str = self::genSaveRecordQuery($record_fields);
-        static::$saveRecordPreparedStatement = 
+        self::$saveRecordPreparedStatement[$called_class_name] = 
             self::$databaseHandle->prepare($save_query_str);
       }
 
+      $save_record_stmt = self::$saveRecordPreparedStatementCache[$called_class_name];
+
       // Bind record fields 
-      foreach ($record_fields as $key => $value) {
-        static::$saveRecordPreparedStatement->bindValue(
-          self::transformForPreparedStatement($key),
-          $value->getValue(),
-          $value->getType()
+      foreach ($record_fields as $field) {
+        $save_record_stmt->bindValue(
+            self::transformForPreparedStatement($field->getKeyName()),
+            $field->getValue(),
+            $field->getType()
         );
       }
       
+      // Initiate implicit transaction, if needed
+      if (self::$numTransactions == 0) {
+        $is_implicit_tx = true; 
+        self::beginTx();
+      }
+
+      // Fail due to invalid database connection
+      assert(isset(self::$databaseHandle));
+
       // Save record fields
-      static::$saveRecordPreparedStatement->execute();
+      $save_record_stmt->execute();
     } catch (PDOException $e) {
       self::$databaseHandle->rollback();
       die("\nERROR: " . $e->getMessage() . "\n");
-    }    
+    }
+
+    // Close implicit tx
+    if ($is_implicit_tx) {
+      self::endTx();
+    }
   }
 
   /**
@@ -608,37 +785,13 @@ abstract class SqlRecord extends AccessLayerObject {
    * @return string : query
    */
   private static function genSaveRecordQuery($record_fields) {
-		$save_query = "UPDATE " . static::$tableName . " SET ";
-		foreach ($vars as $key) {
-			$save_query .= $key . "=" . self::transformForPreparedStatement($key) . ", ";
+		$save_query = "UPDATE " . get_called_class() . " SET ";
+		foreach ($record_fields as $field) {
+			$save_query .= $field->getKeyName() . "=" . self::transformForPreparedStatement($field->getKeyName()) . ", ";
 		}
+    
     return substr($save_query, 0, strlen($save_query) - 2)
-      . " " . static::genPrimaryKeyWhereClause(); 
-  }
-
-  /**
-   * ensurePreparedStatementCacheSync()
-   * - Invalidate cache if it's unsynchronized with the database
-   *   connection. Synchronization is determined by equality
-   *   between 'connectionSyncId' and 'connectionId'
-   */
-  private static function ensurePreparedStatementCacheSync() {
-    // Exit early because prepared statement cache is synchornized
-    // with the current database connection
-    if (static::$connectionSyncId == self::$connectionId) {
-      return;
-    }
-
-    // Invalidate prepared statement cache due to unsynchronized cache/database
-    static::$fetchAllRecordsPreparedStatement = null;
-    static::$fetchRecordPreparedStatement = null;
-    static::$deleteRecordPreparedStatement = null;
-    static::$saveRecordPreparedStatement = null;
-    static::$insertRecordPreparedStatement = null;
-    static::$fetchRecordPreparedStatementsTable = array();
-
-    // Resynchronize cache and database
-    static::$connectionSyncId = self::$connectionId;
+        . " " . static::genPrimaryKeyWhereClause(); 
   }
 
   /**

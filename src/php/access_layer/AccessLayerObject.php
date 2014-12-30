@@ -7,14 +7,25 @@ abstract class AccessLayerObject {
   /**
    * Factory for generating db connections.
    */ 
-  public static $databaseFactory;
+  protected static $databaseFactory = null;
+
+  /**
+   * initDatabaseFactory()
+   * - Initialize database factory/
+   */
+  public static function initDatabaseFactory() {
+    // Initialize db factory
+    if (!isset(self::$databaseFactory)) {
+      self::$databaseFactory = MySqlPdoFactory::get(); 
+    }
+  }
 
   /**
    * insert() 
    * - Insert object into database and return model.
    * - @param init_params: map of params (string:param_name => string:value).
 	 */
-  public abstract static function insert($init_params);
+  protected abstract static function insert($init_params);
 
   /**
    * save()
@@ -29,7 +40,5 @@ abstract class AccessLayerObject {
 	public abstract function delete();
 }
 
-// Initialize database factory 
-AccessLayerObject::$databaseFactory = MySqlPdoFactory::get();
-
+AccessLayerObject::initDatabaseFactory();
 ?>

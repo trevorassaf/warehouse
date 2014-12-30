@@ -1,7 +1,7 @@
 <?php
 
 // -- DEPENDENCIES
-require_once(dirname(__FILE__)."/Enum.php");
+require_once(dirname(__FILE__)."/../util/Import.php");
 require_once(dirname(__FILE__)."/DbTier.php");
 require_once(dirname(__FILE__)."/PdoConfig.php");
 
