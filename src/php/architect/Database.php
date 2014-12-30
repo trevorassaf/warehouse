@@ -70,7 +70,7 @@ class Database {
       // Fail due to pre-existing table
       assert(!isset($this->tableMap[$table->getName()]));
       
-      $this->tableMap[$table->getName()]
+      $this->tableMap[$table->getName()] = $table;
     }
   } 
 }

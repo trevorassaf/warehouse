@@ -15,7 +15,6 @@ abstract class DataTypeName extends Enum {
   protected static $SUPPORTED_TYPES = array(
     self::INT,
     self::UNSIGNED_INT,
-    self::SERIAL,
     self::BOOL,
     self::STRING,
     self::TIMESTAMP,
@@ -28,8 +27,9 @@ abstract class DataTypeArgRequirement extends Enum {
   const NONE = 0;
   const ALLOWS_ONE = 1;
   const REQUIRES_ONE = 2;
-  const ALLOWS_TWO = 3;
-  const REQUIRES_TWO = 4;
+  const REQUIRES_ONE_ALLOWS_TWO = 3;
+  const ALLOWS_ONE_AND_TWO = 4;
+  const REQUIRES_TWO = 5;
 
   protected static $SUPPORTED_TYPES = array(
     self::NONE,
@@ -46,7 +46,6 @@ final class DataType {
   private static
     $intDataType = null,
     $unsignedIntDataType = null,
-    $serialDataType = null,
     $boolDataType = null,
     $stringDataType = null,
     $timestampDataType = null;
@@ -67,13 +66,6 @@ final class DataType {
       self::$unsignedIntDataType = new self(DataTypeName::UNSIGNED_INT, DataTypeArgRequirement::NONE);
     }
     return self::$unsignedIntDataType;
-  }
-
-  public function createSerial() {
-    if (!isset(self::$serialDataType)) {
-      self::$serialDataType = new self(DataTypeName::SERIAL, DataTypeArgRequirement::NONE);
-    }
-    return self::$serialDataType;
   }
 
   public function createBool() {
@@ -109,4 +101,23 @@ final class DataType {
     $this->argRequirement = $arg_requirement;
   }
 
+  public function requiresFirstLength() {
+    return $this->argRequirement == DataTypeArgRequirement::REQUIRES_ONE
+        || $this->argRequirement == DataTypeArgRequirement::REQUIRES_ONE_ALLOWS_TWO
+        || $this->argRequirement == DataTypeArgRequirement::REQUIRES_TWO;
+  }
+
+  public function allowsFirstLength() {
+    return $this->requiresFirstLength() || $this->argRequirement == DataTypeArgRequirement::ALLOWS_ONE
+       || $this->argRequirement == DataTypeArgRequirement::ALLOWS_ONE_AND_TWO; 
+  }
+
+  public function requiresSecondLength() {
+    return $this->argRequirement == DataTypeArgRequirement::REQUIRES_TWO; 
+  }
+
+  public function allowsSecondLength() {
+    return $this->requiresSecondLength() || $this->argRequirement == DataTypeArgRequirement::REQUIRES_ONE_ALLOWS_TWO
+       || $this->argRequirement == DataTypeArgRequirement::ALLOWS_ONE_AND_TWO; 
+  }
 }

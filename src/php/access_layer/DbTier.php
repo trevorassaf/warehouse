@@ -1,6 +1,6 @@
 <?php
 
-require_once(dirname(__FILE__)."/../util/Import.php")
+require_once(dirname(__FILE__)."/../util/Import.php");
 
 abstract class DbTier extends Enum {
 

@@ -88,7 +88,7 @@ class ColumnBuilder {
    * @param is_foreign_key : bool 
    * @return this
    */
-  public function setForeignKey($is_foreign_key) {
+  public function setIsForeignKey($is_foreign_key) {
     $this->isForeignKey = $is_foreign_key;
     return $this;
   }
@@ -99,8 +99,8 @@ class ColumnBuilder {
    * @param foreign_key_table : string 
    * @return this
    */
-  public function setForeignKeyTableName($table_name) {
-    $this-> = $table_name;
+  public function setForeignKeyTable($table) {
+    $this->foreignKeyTable = $table;
     return $this;
   }
 
@@ -111,7 +111,7 @@ class ColumnBuilder {
    * @return this
    */
   public function setIsReadOnly($is_read_only) {
-    $this->foreignKeyTable = $table_name;
+    $this->isReadOnly = $is_read_only;
     return $this;
   }
 
@@ -127,8 +127,21 @@ class ColumnBuilder {
     assert(isset($this->dataType));
 
     // Fail due to invalid datatype
-    assert($this->dataType->requiresFirstLength() ^ isset($this->firstLength));
-    assert($this->dataType->requiresSecondLength() ^ isset($this->secondLength));
+    if ($this->dataType->allowsFirstLength()) {
+      if ($this->dataType->requiresFirstLength()) {
+        assert(isset($this->firstLength));
+      } 
+    } else {
+      assert(!isset($this->firstLength));
+    }
+
+    if ($this->dataType->allowsSecondLength()) {
+      if ($this->dataType->requiresSecondLength()) {
+        assert(isset($this->secondLength));
+      } 
+    } else {
+      assert(!isset($this->secondLength));
+    }
 
     return new Column(
       $this->name,
@@ -234,7 +247,16 @@ class Column {
    * - Return table pointed to by this foreign key.
    * @return Table : foreign key table 
    */
-  public function isForeignKey() {
-    return $this->isForeignKey;
+  public function getForeignKeyTable() {
+    return $this->foreignKeyTable;
+  }
+
+  /**
+   * isReadOnly()
+   * - Indicate if field is read-only.
+   * @return bool : is read only 
+   */
+  public function isReadOnly() {
+    return $this->isReadOnly;
   }
 }
