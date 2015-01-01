@@ -28,7 +28,7 @@ class Architect {
 echo "\nCreate database\n";
 $result_stmt = $dbh->query("CREATE DATABASE " . $database->getName());
 echo "\nFinishd creating database\n";
-      var_dump($result_stmt->fetchAll());
+      var_dump($result_stmt->fetchAllRows());
 
       $dbh->commit();
     } catch (PDOException $e) {
@@ -71,12 +71,10 @@ echo "\nFinishd creating database\n";
   }
 
   private function loadMySqlConfig() {
-    $builder = new MySqlPdoConfigBuilder();
+    $builder = new DbhConfigBuilder();
     return $builder
-        ->setConnectionType(MySqlConnectionType::LOCALHOST)
         ->setUsername("trevor")
         ->setPassword("password")
-        ->setCharSet(MySqlDbCharSet::ASCII)
         ->build();
   }
 

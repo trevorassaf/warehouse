@@ -5,6 +5,9 @@ require_once(dirname(__FILE__)."/DbhConfig.php");
 
 class MySqlPdoDbh extends PdoDbh {
 
+  // Pdo char set options prefix
+  const PDO_CHAR_SET_PREFIX = "SET NAMES ";
+
   // DSN keys
   const DSN_DRIVER_NAME = "mysql";
   const DSN_HOST_KEY = "host";
@@ -50,9 +53,21 @@ class MySqlPdoDbh extends PdoDbh {
    */
   protected function genPdoOptions($config) {
     return array(
-      PDO::MYSQL_ATTR_INIT_COMMAND => MySqlDbCharSet::genPdoCharSetStr($config->getCharSet()),
+      // TODO redo genPdoCharSetStr func!
+      PDO::MYSQL_ATTR_INIT_COMMAND => CharSet::genPdoCharSetStr($config->getCharSet()),
       PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
       PDO::ATTR_EMULATE_PREPARES => false,
     ); 
+  }
+
+  /**
+   * genPdoCharStr()
+   * - Return pdo option string for char set.
+   * @param char_set : CharSet
+   * @return string : pdo options string
+   */
+  private function genPdoCharStr($char_set) {
+    CharSet::validateType($char_set);
+    return self::PDO_CHAR_SET_PREFIX . $char_set; 
   }
 }
