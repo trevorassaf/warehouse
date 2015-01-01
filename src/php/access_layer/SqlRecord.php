@@ -102,6 +102,9 @@ abstract class SqlRecord extends AccessLayerObject {
     // Fail due to pre-existing database transaction 
     assert(!isset(self::$databaseHandle));
 
+    // Fail due to uninitialized database factory
+    assert(isset(self::$databaseFactory));
+
     try {
       // Initialize db connection
       self::$databaseHandle = parent::$databaseFactory->getConnection($connection_type);

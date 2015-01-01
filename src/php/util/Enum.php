@@ -21,6 +21,8 @@ abstract class Enum {
   
   protected static $SUPPORTED_TYPES;
 
+  private function __construct() {}
+
   public static function validateType($enum_value) {
     if (!isset($enum_value) || !in_array($enum_value, static::$SUPPORTED_TYPES)) {
       throw new InvalidEnumType(get_called_class(), $enum_value);
