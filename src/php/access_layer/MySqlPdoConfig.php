@@ -86,18 +86,16 @@ final class MySqlPdoConfig extends PdoConfig {
       throw new RuntimeException("Must set 'password' in MySQl PDO configuration");
     }
 
-    MySqlDbCharSet::validateType($char_set);
     if (!isset($char_set)) {
       throw new RuntimeException("Must set 'charSet' in MySQl PDO configuration");
     }
+    MySqlDbCharSet::validateType($char_set);
 
-    if (!isset($db_name)) {
-      throw new RuntimeException("Must set 'dbName' in MySQl PDO configuration");
-    }
-
-    DbTier::validateType($db_tier);
-    if (!isset($db_tier)) {
-      throw new RuntimeException("Must set 'dbTier' in MySQl PDO configuration");
+    if (isset($db_name)) {
+      if (!isset($db_tier)) {
+        throw new RuntimeException("Must set 'dbTier' in MySQl PDO configuration");
+      }
+      DbTier::validateType($db_tier);
     }
 
     // Validate connection type 
@@ -147,15 +145,22 @@ final class MySqlPdoConfig extends PdoConfig {
     $this->userName = $username;
     $this->password = $password;
     $this->charSet = $char_set;
-    $this->dbName = $db_name;
-    $this->dbTier = $db_tier;
-    $this->dbNameWithTier = DbTier::genDbNameWithTier($db_name, $db_tier);
+
+    // Set db name, if specified 
+    if (isset($db_name)) {
+      $this->dbName = $db_name;
+      $this->dbTier = $db_tier;
+      $this->dbNameWithTier = DbTier::genDbNameWithTier($db_name, $db_tier);
+    }
   }
 
   protected function genDsnMap() {
-    $dsn_map = array(
-      self::DSN_DBNAME_KEY => $this->dbNameWithTier,
-    );
+    $dsn_map = array();
+    if (isset($this->dbNameWithTier)) {
+      $dsn_map = array(
+        self::DSN_DBNAME_KEY => $this->dbNameWithTier,
+      );
+    }
 
     // Specify db connection over unix socket or host/port
     switch ($this->connectionType) {

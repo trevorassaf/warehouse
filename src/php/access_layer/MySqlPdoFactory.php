@@ -7,8 +7,6 @@ require_once("DbTier.php");
 
 class MySqlPdoFactory extends PdoFactory {
 
-  private $mySqlConfig;
-
   /**
    * createConnection()
    * @Override PdoFactory
@@ -18,19 +16,20 @@ class MySqlPdoFactory extends PdoFactory {
     if (isset($req_type)) {
       throw new Exception("No support for req type specification at this time."); 
     }
-    
+
     // Open new db connection
     return new PDO(
-      $this->mySqlConfig->getDsn(), 
-      $this->mySqlConfig->getUserName(),
-      $this->mySqlConfig->getPassword(),
-      $this->mySqlConfig->getOptions());                    
+      $this->pdoConfig->getDsn(), 
+      $this->pdoConfig->getUserName(),
+      $this->pdoConfig->getPassword(),
+      $this->pdoConfig->getOptions());                    
   }
 
   /**
    * loadDbConfig()
    * @Override PdoFactory
    */
+  /**
   protected function loadDbConfig() {
     $builder = new MySqlPdoConfigBuilder();
     $this->mySqlConfig = $builder
@@ -42,4 +41,5 @@ class MySqlPdoFactory extends PdoFactory {
       ->setCharSet(MySqlDbCharSet::ASCII)
       ->build();
   }
+   */
 }

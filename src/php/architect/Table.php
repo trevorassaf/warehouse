@@ -46,4 +46,13 @@ class Table {
       $this->addColumn($column);
     }
   } 
+
+  /**
+   * geColumnMap()
+   * - Return column map
+   * @return Map<string:column-map, Column:column>
+   */
+  public function getColumnMap() {
+    return $this->columnMap;
+  }
 }

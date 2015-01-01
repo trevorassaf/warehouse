@@ -13,10 +13,10 @@ abstract class AccessLayerObject {
    * initDatabaseFactory()
    * - Initialize database factory/
    */
-  public static function initDatabaseFactory() {
+  public static function initDatabaseFactory($mysql_config) {
     // Initialize db factory
     if (!isset(self::$databaseFactory)) {
-      self::$databaseFactory = MySqlPdoFactory::get(); 
+      self::$databaseFactory = MySqlPdoFactory::get($mysql_config); 
     }
   }
 
@@ -39,6 +39,3 @@ abstract class AccessLayerObject {
    */
 	public abstract function delete();
 }
-
-AccessLayerObject::initDatabaseFactory();
-?>
