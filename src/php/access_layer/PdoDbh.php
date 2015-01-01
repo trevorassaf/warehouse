@@ -2,6 +2,7 @@
 
 require_once("DatabaseHandle.php");
 require_once("DbhException.php");
+require_once("PdoStmt.php");
 
 abstract class PdoDbh extends DatabaseHandle {
 
@@ -109,6 +110,7 @@ abstract class PdoDbh extends DatabaseHandle {
     $this->prevQueryStr = $query_str;
     try {
       $pdo_stmt = $this->pdoDbHandle->query($query_str);
+      return new PdoStmt($pdo_stmt);
       // TODO return PreparedStatement
     } catch (PDOException $e) {
       throw new DbhException($e, $this->prevQueryStr); 
@@ -122,7 +124,7 @@ abstract class PdoDbh extends DatabaseHandle {
   public function prepare($prepared_query_str) {
     try {
       $pdo_stmt = $this->pdoDbHandle->prepare($prepared_query_str);
-      // TODO return PreparedStatement
+      return new PdoStmt($pdo_stmt);
     } catch (PDOException $e) {
       throw new DbhException($e, $this->prevQueryStr); 
     }

@@ -11,6 +11,6 @@ $dbh_config = $dbh_config_builder->build();
 $mysql_pdo_factory = MySqlPdoFactory::get($dbh_config);
 $dbh = $mysql_pdo_factory->getConnection();
 
-$dbh->query("SHOW DATABASES");
-
-var_dump($dbh);
+$pdo_stmt = $dbh->query("SHOW DATABASES");
+$results = $pdo_stmt->fetchAllRows();
+var_dump($results);

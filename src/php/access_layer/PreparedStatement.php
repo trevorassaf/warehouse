@@ -23,11 +23,4 @@ interface PreparedStatement {
    * @return array<mixed> : array of result rows
    */
   public function fetchAllRows();
-
-  /**
-   * popRow()
-   * - Pop row from result set.
-   * @return mixed (usually map<string:key, mixed:result-value>)
-   */
-  public function popRow();
 }
