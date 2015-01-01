@@ -1,7 +1,7 @@
 <?php
 
 require_once("PreparedStatement.php");
-require_once("DataTypeName.php");
+require_once("../DataTypeName.php");
 
 class PdoStmt implements PreparedStatement {
 

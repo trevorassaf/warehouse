@@ -1,7 +1,7 @@
 <?php
 
 require_once("DatabaseHandle.php");
-require_once("DbhException.php");
+require_once("exceptions/DbhException.php");
 require_once("PdoStmt.php");
 
 abstract class PdoDbh extends DatabaseHandle {
