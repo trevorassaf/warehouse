@@ -52,20 +52,26 @@ class DbhConfig {
     $char_set,
     $db_name
   ) {
-    // Fail due to invalid db config
-    assert(isset($connection_type));
-    ConnectionType::validateType($connection_type);
-
+    // Fail due to unset mandatory fields
     assert(isset($username));
     assert(isset($password));
+
+    // Fail due to invalid db config
+    if (!isset($connection_type)) {
+      $connection_type = ConnectionType::LOCALHOST; 
+    } else {
+      ConnectionType::validateType($connection_type);
+    }
     
     if (isset($unix_socket)) {
       assert(!isset($host) && !isset($port));
-    } else {
-      assert(isset($host));
+    } else if (isset($host)) {
+      assert(!isset($unix_socket));
     }
 
-    if (isset($char_set)) {
+    if (!isset($char_set)) {
+      $char_set = CharSet::ASCII;
+    } else {
       CharSet::validateType($char_set);
     }
 

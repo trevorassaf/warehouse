@@ -10,11 +10,13 @@ abstract class PdoFactory {
   /**
    * Configuration for pdo factory.
    */
-  protected $pdoConfig;
+  protected $dbhConfig;
 
   /**
    * get()
    * - Provide reference to PdoFactory singleton.
+   * @param config : DbhConfig 
+   * @return PdoFactory : pdo db factory
    */
   public static function get($config) {
     return new static($config);
@@ -25,7 +27,7 @@ abstract class PdoFactory {
    * - This Ctor is private to enable factory pattern. 
    */
   private function __construct($config) {
-    $this->pdoConfig = $config;
+    $this->dbhConfig = $config;
   }
 
   /**
