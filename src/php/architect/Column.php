@@ -7,8 +7,8 @@ class ColumnBuilder {
     $dataType,
     $firstLength,
     $secondLength,
+    $isUnique,
     $allowsNull,
-    $isForeignKey,
     $foreignKeyTable,
     $isReadOnly;
 
@@ -21,8 +21,8 @@ class ColumnBuilder {
     $this->dataType = null;
     $this->firstLength = null;
     $this->secondLength = null;
+    $this->isUnique = false;
     $this->allowsNull = false;
-    $this->isForeignKey = false;
     $this->foreignKeyTable = null;
     $this->isReadOnly = false;
   }
@@ -72,6 +72,17 @@ class ColumnBuilder {
   }
 
   /**
+   * setIsUnique()
+   * - Set second length 
+   * @param second_length : unsigned int 
+   * @return this
+   */
+  public function setIsUnique($is_unique) {
+    $this->isUnique = $is_unique;
+    return $this;
+  }
+
+  /**
    * setAllowsNull()
    * - Set allows null 
    * @param allows_null : bool 
@@ -79,17 +90,6 @@ class ColumnBuilder {
    */
   public function setAllowsNull($allows_null) {
     $this->allowsNull = $allows_null;
-    return $this;
-  }
-
-  /**
-   * setIsForiegnKey()
-   * - Indicate that the column is a foreign key  
-   * @param is_foreign_key : bool 
-   * @return this
-   */
-  public function setIsForeignKey($is_foreign_key) {
-    $this->isForeignKey = $is_foreign_key;
     return $this;
   }
 
@@ -123,24 +123,35 @@ class ColumnBuilder {
     // Fail due to unset name
     assert(isset($this->name));
 
-    // Fail due to unset datatype
-    assert(isset($this->dataType));
-
-    // Fail due to invalid datatype
-    if ($this->dataType->allowsFirstLength()) {
-      if ($this->dataType->requiresFirstLength()) {
-        assert(isset($this->firstLength));
-      } 
-    } else {
+    if (isset($this->foreignKeyTable)) {
+      assert(!isset($this->dataType)); 
       assert(!isset($this->firstLength));
-    }
-
-    if ($this->dataType->allowsSecondLength()) {
-      if ($this->dataType->requiresSecondLength()) {
-        assert(isset($this->secondLength));
-      } 
-    } else {
       assert(!isset($this->secondLength));
+      assert($this->isUnique == false);
+      assert($this->allowsNull == false);
+      assert($this->isReadOnly == false);
+
+      $this->dataType = DataType::unsignedInt();
+    } else {
+      // Fail due to unset datatype
+      assert(isset($this->dataType));
+      
+      // Fail due to invalid datatype
+      if ($this->dataType->allowsFirstLength()) {
+        if ($this->dataType->requiresFirstLength()) {
+          assert(isset($this->firstLength));
+        } 
+      } else {
+        assert(!isset($this->firstLength));
+      }
+
+      if ($this->dataType->allowsSecondLength()) {
+        if ($this->dataType->requiresSecondLength()) {
+          assert(isset($this->secondLength));
+        } 
+      } else {
+        assert(!isset($this->secondLength));
+      }
     }
 
     return new Column(
@@ -148,8 +159,8 @@ class ColumnBuilder {
       $this->dataType,
       $this->firstLength,
       $this->secondLength,
+      $this->isUnique,
       $this->allowsNull,
-      $this->isForeignKey,
       $this->foreignKeyTable,
       $this->isReadOnly
     );
@@ -163,6 +174,7 @@ class Column {
     $dataType,
     $firstLength,
     $secondLength,
+    $isUnique,
     $allowsNull,
     $isForeignKey,
     $foreignKeyTable,
@@ -173,8 +185,8 @@ class Column {
     $data_type,
     $first_length,
     $second_length,
+    $isUnique,
     $allows_null,
-    $is_foreign_key,
     $foreign_key_table,
     $is_read_only
   ) {
@@ -182,9 +194,10 @@ class Column {
     $this->dataType = $data_type;
     $this->firstLength = $first_length;
     $this->secondLength = $second_length;
+    $this->isUnique = $is_unique;
     $this->allowsNull = $allows_null;
-    $this->isForeignKey = $is_foreign_key;
     $this->foreignKeyTable = $foreign_key_table;
+    $this->isForeignKey = isset($this->foreignKeyTable);
     $this->isReadOnly = $is_foreign_key;
   }
 
@@ -207,6 +220,15 @@ class Column {
   }
 
   /**
+   * hasFirstLength()
+   * - Return true iff first length was specified.
+   * @return bool : true if has first length
+   */
+  public function hasFirstLength() {
+    return isset($this->firstLength);
+  }
+
+  /**
    * getFirstLength()
    * - Return first-length of column.
    * @return unsigned int : field length
@@ -216,12 +238,30 @@ class Column {
   }
 
   /**
+   * hasSecondLength()
+   * - Return true iff second length was specified.
+   * @return bool : true if has first length
+   */
+  public function hasSecondLength() {
+    return isset($this->secondLength);
+  }
+
+  /**
    * getSecondLength()
    * - Return second-length of column.
    * @return unsigned int : second length, often precision 
    */
   public function getSecondLength() {
     return $this->secondLength;
+  }
+
+  /**
+   * isUnique()
+   * - Return true iff column is unique.
+   * @return bool : is column unique
+   */
+  public function isUnique() {
+    return $this->isUnique;
   }
 
   /**

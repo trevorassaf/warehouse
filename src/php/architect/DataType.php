@@ -102,4 +102,8 @@ final class DataType {
     return $this->requiresSecondLength() || $this->argRequirement == DataTypeArgRequirement::REQUIRES_ONE_ALLOWS_TWO
        || $this->argRequirement == DataTypeArgRequirement::ALLOWS_ONE_AND_TWO; 
   }
+
+  public function getName() {
+    return $this->name;
+  }
 }
