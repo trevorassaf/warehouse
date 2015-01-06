@@ -4,7 +4,8 @@ class Database {
 
   private
     $name,
-    $tableMap;
+    $tableMap,
+    $tableMappingList;
 
   /**
    * __construct()
@@ -13,6 +14,7 @@ class Database {
   public function __construct($name) {
     $this->name = $name;
     $this->tableMap = array();
+    $this->tableMappingList = array();
   }
 
   /**
@@ -31,6 +33,16 @@ class Database {
    */
   public function getTableMap() {
     return $this->tableMap;
+  }
+
+  /**
+   * getInterTableMappings()
+   * - Return set of undirected edges between tables with
+   *    enum specifying relationship between tables.
+   * @return array<InterTableMapping>
+   */
+  public function getInterTableMappings() {
+    return $this->tableMappingList; 
   }
 
   /**
@@ -73,4 +85,40 @@ class Database {
       $this->tableMap[$table->getName()] = $table;
     }
   } 
+
+  /**
+   * addTableMapping()
+   * - Add inter-table-mapping to set.
+   * @param InterTableMapping : undirected edge between tables w/mapping type
+   */
+  public function addTableMapping($table_mapping) {
+    // Fail due to unset mapping list
+    assert(isset($this->tableMappingList));
+
+    // Fail due to unset table-mapping arg
+    assert(isset($table_mapping));
+
+    $first_table = $table_mapping->getFirstTable();
+    $second_table = $table_mapping->getSecondTable();
+
+    // Fail due to unregistered table
+    assert(isset($this->tableMap[$first_table->getName()])
+        && $this->tableMap[$first_table->getName()] == $first_table);
+    
+    assert(isset($this->tableMap[$second_table->getName()])
+        && $this->tableMap[$second_table->getName()] == $second_table);
+
+    $this->tableMappingList[] = $table_mapping;
+  }
+
+  /**
+   * addTableMappings()
+   * - Add inter-table-mappings to set.
+   * @param array<InterTableMapping> : undirected edges between tables w/mapping type
+   */
+  public function addTableMappings($table_mapping_list) {
+    foreach ($table_mapping_list as $table_mapping) {
+      $this->addTableMapping($table_mapping);
+    } 
+  }
 }

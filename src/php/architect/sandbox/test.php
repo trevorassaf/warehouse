@@ -20,13 +20,7 @@ $foo_table->addColumn($foo_name_col);
 $bar_table = new Table("bar");
 $test_db->addTable($bar_table);
 
-$foo_fk_col_builder = new ColumnBuilder();
-$foo_fk_col = $foo_fk_col_builder
-  ->setName("foo_id")
-  ->setForeignKeyTable($foo_table)
-  ->build();
-
-$bar_table->addColumn($foo_fk_col);
+$test_db->addTableMapping(InterTableMapping::oneToOne($foo_table, $bar_table));
 
 $arch = new Architect();
 $arch->create($test_db, "./");

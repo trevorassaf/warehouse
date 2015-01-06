@@ -9,7 +9,6 @@ class ColumnBuilder {
     $secondLength,
     $isUnique,
     $allowsNull,
-    $foreignKeyTable,
     $isReadOnly;
 
   /**
@@ -23,7 +22,6 @@ class ColumnBuilder {
     $this->secondLength = null;
     $this->isUnique = false;
     $this->allowsNull = false;
-    $this->foreignKeyTable = null;
     $this->isReadOnly = false;
   }
 
@@ -94,17 +92,6 @@ class ColumnBuilder {
   }
 
   /**
-   * setForeignKeyTableName()
-   * - Set foreign key table name  
-   * @param foreign_key_table : string 
-   * @return this
-   */
-  public function setForeignKeyTable($table) {
-    $this->foreignKeyTable = $table;
-    return $this;
-  }
-
-  /**
    * setIsReadOnly()
    * - Indicate if column is read only 
    * @param is_read_only : string 
@@ -123,35 +110,24 @@ class ColumnBuilder {
     // Fail due to unset name
     assert(isset($this->name));
 
-    if (isset($this->foreignKeyTable)) {
-      assert(!isset($this->dataType)); 
-      assert(!isset($this->firstLength));
-      assert(!isset($this->secondLength));
-      assert($this->isUnique == false);
-      assert($this->allowsNull == false);
-      assert($this->isReadOnly == false);
-
-      $this->dataType = DataType::unsignedInt();
+    // Fail due to unset datatype
+    assert(isset($this->dataType));
+    
+    // Fail due to invalid datatype
+    if ($this->dataType->allowsFirstLength()) {
+      if ($this->dataType->requiresFirstLength()) {
+        assert(isset($this->firstLength));
+      } 
     } else {
-      // Fail due to unset datatype
-      assert(isset($this->dataType));
-      
-      // Fail due to invalid datatype
-      if ($this->dataType->allowsFirstLength()) {
-        if ($this->dataType->requiresFirstLength()) {
-          assert(isset($this->firstLength));
-        } 
-      } else {
-        assert(!isset($this->firstLength));
-      }
+      assert(!isset($this->firstLength));
+    }
 
-      if ($this->dataType->allowsSecondLength()) {
-        if ($this->dataType->requiresSecondLength()) {
-          assert(isset($this->secondLength));
-        } 
-      } else {
-        assert(!isset($this->secondLength));
-      }
+    if ($this->dataType->allowsSecondLength()) {
+      if ($this->dataType->requiresSecondLength()) {
+        assert(isset($this->secondLength));
+      } 
+    } else {
+      assert(!isset($this->secondLength));
     }
 
     return new Column(
@@ -161,7 +137,6 @@ class ColumnBuilder {
       $this->secondLength,
       $this->isUnique,
       $this->allowsNull,
-      $this->foreignKeyTable,
       $this->isReadOnly
     );
   }
@@ -176,8 +151,6 @@ class Column {
     $secondLength,
     $isUnique,
     $allowsNull,
-    $isForeignKey,
-    $foreignKeyTable,
     $isReadOnly;
 
   public function __construct(
@@ -187,7 +160,6 @@ class Column {
     $second_length,
     $isUnique,
     $allows_null,
-    $foreign_key_table,
     $is_read_only
   ) {
     $this->name = $name;
@@ -196,8 +168,6 @@ class Column {
     $this->secondLength = $second_length;
     $this->isUnique = $is_unique;
     $this->allowsNull = $allows_null;
-    $this->foreignKeyTable = $foreign_key_table;
-    $this->isForeignKey = isset($this->foreignKeyTable);
     $this->isReadOnly = $is_foreign_key;
   }
 
@@ -271,24 +241,6 @@ class Column {
    */
   public function getAllowsNull() {
     return $this->allowsNull;
-  }
-
-  /**
-   * isForeignKey()
-   * - Indicate if field is foreign key.
-   * @return bool : true iff field is foreign key 
-   */
-  public function isForeignKey() {
-    return $this->isForeignKey;
-  }
-
-  /**
-   * getForeignKeyTable()
-   * - Return table pointed to by this foreign key.
-   * @return Table : foreign key table 
-   */
-  public function getForeignKeyTable() {
-    return $this->foreignKeyTable;
   }
 
   /**
