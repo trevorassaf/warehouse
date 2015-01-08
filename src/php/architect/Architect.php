@@ -1,10 +1,18 @@
 <?php
 
 require_once(dirname(__FILE__)."/../access_layer/Import.php");
-require_once("InterTableMapping.php");
 require_once("Database.php");
 
 class Architect {
+
+  const DB_SUPER_CLASS_NAME = 'SqlRecord';
+  const SQL_RECORD_GLOBAL_PATH = '';
+
+  const CREATE_SQL_DB_FILE_NAME = 'create.sql';
+  const DROP_SQL_DB_FILE_NAME = 'drop.sql';
+
+  const IMPORT_PHP_FILE_NAME = 'import.php';
+  const ACCESS_LAYER_FILE_NAME = 'access_layer.php';
 
   private static $SQL_DATA_TYPE_MAP = array(
     DataTypeName::INT => "INT",
@@ -24,7 +32,7 @@ class Architect {
   private static $FUNDAMENTAL_DATA_TYPES = array(
     SqlRecord::ID_KEY => "SERIAL",
     SqlRecord::CREATED_KEY => "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
-    SqlRecord::LAST_UPDATED_TIME => "TIMESTAMP DEFAULT CURRENT_TIMSTAMP ON UPDATE CURRENT_TIMSTAMP",
+    SqlRecord::LAST_UPDATED_TIME => "TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
   );
 
   private static $FOREIGN_KEY_DATA_TYPES = array(
@@ -39,29 +47,46 @@ class Architect {
    * @return void
    */
   public function create($database, $path) {
-    // Fail due to invalid parent dir
-    assert(is_dir($path));
+    $path .= $database->getName() . '/';
 
-    $this->createSqlFiles($database, $path);
-    $this->createPhpFiles($database, $path);
-  }
+    // Can't be a normal file
+    assert(!is_file($path) || is_dir($path));
 
-  /**
-   * createSqlFiles()
-   * - Create sql files and make database. If failure encountered,
-   *    removes sql files and db updates.
-   * @param database : Database
-   * @param path : string
-   * @return void
-   */
-  private function createSqlFiles($database, $path) {
-    // Create sql files
-    $create_db_query = $this->genCreateDbQuery($database->getName());
-    echo "Create db query: " . $create_db_query . "\n";
+    // Create sql queries 
     $drop_db_query = $this->genDropDbQuery($database->getName());
-    echo "Drop db query: " . $drop_db_query . "\n";
     $create_tables_query = $this->genCreateTablesQuery($database);
-    echo "Create tables query: " . $create_tables_query . "\n";
+    echo "\n\n" . $create_tables_query . "\n\n"; 
+    $access_layer_contents = $this->genCreateAccessLayer($database);;
+
+    // Create directory
+    if (!file_exists($path)) {
+      if (!mkdir($path)) {
+        die("Couldn't make dir: {$path}");
+      }
+    } else {
+      assert(is_dir($path));
+    }
+
+    // Create 'create-db' script
+    $create_sql_db_path = $path . self::CREATE_SQL_DB_FILE_NAME;
+    if (!file_put_contents($create_sql_db_path, $create_tables_query)) {
+      die("Couldn't create {$create_sql_db_path}");
+    }
+
+    // Create 'drop-db' script
+    $drop_sql_db_path = $path . self::DROP_SQL_DB_FILE_NAME;
+    if (!file_put_contents($drop_sql_db_path, $drop_db_query)) {
+      unlink($create_sql_db_path);
+      die("Couldn't create {$drop_sql_db_path}");
+    }
+
+    // Create php file for access-layer 
+    $access_layer_path = $path . self::ACCESS_LAYER_FILE_NAME; 
+    if (!file_put_contents($access_layer_path, $access_layer_contents)) {
+      unlink($create_sql_db_path);
+      unink($drop_sql_db_path); 
+      die("Couldn't create {$access_layer_path}");
+    }
   }
 
   /**
@@ -71,7 +96,7 @@ class Architect {
    * @return string : create database query 
    */
   private function genCreateDbQuery($db_name) {
-    return "CREATE DATABASE " . $db_name;
+    return "CREATE DATABASE {$db_name};";
   }
 
   /**
@@ -81,7 +106,7 @@ class Architect {
    * @return string : drop database query 
    */
   private function genDropDbQuery($db_name) {
-    return "DROP DATABASE " . $db_name;
+    return "DROP DATABASE {$db_name};";
   }
 
   /**
@@ -91,11 +116,13 @@ class Architect {
    * @return string : table creation query
    */
   private function genCreateTablesQuery($database) {
-    $create_all_tables_query = "";
+    // Generate 'create-database' query
+    $create_all_tables_query = $this->genCreateDbQuery($database->getName()) . "\n\n";
     $table_map = $database->getTableMap();
 
     // Create tables query w/o foreign key columns, join tables, and constraints.
-    foreach ($table_map as $table_name => $table) {
+    foreach ($table_map as $table_name => $table_with_mapping_set) {
+      $table = $table_with_mapping_set->getTable();
       $create_table_query = $this->genCreateTableQueryHeader($database->getName(), $table_name);
       foreach ($table->getColumnMap() as $column_name => $column) {
         // Fail due to invalid column name
@@ -110,54 +137,63 @@ class Architect {
     }
 
     // Create foreign key columns, join tables, and constraints.
-    $create_all_foreign_keys_query = '';
-    foreach ($database->getInterTableMappings() as $table_mapping) {
-      $create_mapping_query = '';
-      switch ($table_mapping->getMappingType()) {
+    $create_all_table_mappings_query = '';
+    foreach ($table_map as $primary_table_name => $table_with_mapping_set) {
+      $create_table_mapping_query = '';
+      foreach ($table_with_mapping_set->getMappingSet() as $secondary_table_name => $mapping_type) {
+        switch ($mapping_type) {
         // Add id column and fk constraint to both tables.
-        case MappingType::ONE_TO_ONE:
-          $create_mapping_query .= 
-            $this->genCreateForeignKeyQuery(
-                $database->getName(),
-                $table_mapping->getFirstTable()->getName(),
-                $table_mapping->getSecondTable()->getName()
-            ) . "\n\n" .
-            $this->genCreateForeignKeyQuery(
-                $database->getName(),
-                $table_mapping->getSecondTable()->getName(),
-                $table_mapping->getFirstTable()->getName()
-            );
+        case TableMappingType::ONE_TO_ONE:
+          $create_table_mapping_query = 
+              $this->genCreateForeignKeyQuery(
+                  $database->getName(),
+                  $primary_table_name,
+                  $secondary_table_name
+              ) . "\n\n" .
+              $this->genCreateForeignKeyQuery(
+                  $database->getName(),
+                  $secondary_table_name,
+                  $primary_table_name
+              );
           break;
 
         // Add id column and fk constraint to second table only.  
-        case MappingType::ONE_TO_MANY:
-          $create_mapping_query .= $this->genCreateForeignKeyQuery(
-              $database->getName(),
-              $table_mapping->getSecondTable()->getName(),
-              $table_mapping->getFirstTable()->getName()
+        case TableMappingType::MANY_TO_ONE:
+          $create_table_mapping_query =
+              $this->genCreateForeignKeyQuery(
+                  $database->getName(),
+                  $primary_table_name,
+                  $secondary_table_name
           );
           break;
 
         // Create join table w/id columns and fk constraints.  
-        case MappingType::MANY_TO_MANY:
-          $create_mapping_query .= $this->genCreateJoinTableQuery(
-              $database->getName(),
-              $table_mapping->getSecondTable()->getName(),
-              $table_mapping->getFirstTable()->getName()
-          );
+        case TableMappingType::MANY_TO_MANY:
+          $create_table_mapping_query =
+              $this->genCreateJoinTableQuery(
+                  $database->getName(),
+                  $primary_table_name,
+                  $secondary_table_name
+              );
+          break;
+
+        // Ignore because asymmetric conjugate type is handled instead.
+        case TableMappingType::ONE_TO_MANY:
           break;
 
         // Shouldn't happen...  
         default:
-          die("Unexpected MappingType: " . $table_mapping->getMappingType());
+          die("Unexpected MappingType: " . $mapping_type);
           break;  
+          
+        }
       }
       
-      $create_all_foreign_keys_query .= $create_mapping_query . "\n\n";
+      $create_all_table_mappings_query .= $create_table_mapping_query . "\n\n";
     }
 
     // Trim trailing new lines from queries 
-    return $create_all_tables_query . substr($create_all_foreign_keys_query, 0, -2);
+    return $create_all_tables_query . substr($create_all_table_mappings_query, 0, -2);
   }
 
   /**
@@ -173,7 +209,7 @@ class Architect {
     return "ALTER TABLE {$database_name}.{$source_table_name}\n\tADD COLUMN {$fk_col_name} "
       . self::$FOREIGN_KEY_DATA_TYPES[SqlRecord::ID_KEY] . ",\n\t"
       . "ADD FOREIGN KEY({$fk_col_name}) REFERENCES {$database_name}.{$referenced_table_name}("
-      . SqlRecord::ID_KEY . "));";
+      . SqlRecord::ID_KEY . ");";
   }
 
   /**
@@ -185,7 +221,7 @@ class Architect {
    * @return string : query creating join table
    */
   private function genCreateJoinTableQuery($database_name, $source_table_name, $referenced_table_name) {
-    $join_table_name = $this->createJoinTableNameFromTableNames($source_table_name, $referenced_table_name);        
+    $join_table_name = $this->createJoinTableNameFromTableNames($database_name, $source_table_name, $referenced_table_name);        
     $source_column_name = $this->createForeignKeyColumnName($source_table_name);
     $referenced_column_name = $this->createForeignKeyColumnName($referenced_table_name);
     $fk_data_type = self::$FOREIGN_KEY_DATA_TYPES[SqlRecord::ID_KEY];
@@ -206,18 +242,15 @@ class Architect {
    * @return string : name of join table
    */
   public static function createJoinTableNameFromTableNames($database_name, $table_name_a, $table_name_b) {
-    $lower_case_table_name_a = strtolower($table_name_a);
-    $lower_case_table_name_b = strtolower($table_name_b);
-
    // Order tables lexicographically 
     $low_lex = '';
     $high_lex = '';
-    if ($lower_case_table_name_a < $lower_case_table_name_b) {
-      $low_lex = $lower_case_table_name_a;
-      $high_lex = $lower_case_table_name_b;  
+    if ($table_name_a < $table_name_b) {
+      $low_lex = $table_name_a;
+      $high_lex = $table_name_b;  
     } else {
-      $low_lex = $lower_case_table_name_b;
-      $high_lex = $lower_case_table_name_a;  
+      $low_lex = $table_name_b;
+      $high_lex = $table_name_a;  
     }
     
     return "{$database_name}.{$low_lex}_{$high_lex}_join_table";
@@ -230,7 +263,7 @@ class Architect {
    * @return string : name of foreign key column
    */
   private function createForeignKeyColumnName($referenced_table_name) {
-    return strtolower($referenced_table_name) . "_" . SqlRecord::ID_KEY;
+    return $referenced_table_name . "_" . SqlRecord::ID_KEY;
   }
 
   /**
@@ -280,7 +313,7 @@ class Architect {
   private function genCreateTableQueryHeader($db_name, $table_name) {
     return "CREATE TABLE {$db_name}.{$table_name}(\n"
       . "\t" . SqlRecord::ID_KEY . " " . self::$FUNDAMENTAL_DATA_TYPES[SqlRecord::ID_KEY]. ",\n"
-      . "\tPRIMARY KEY(" . SqlRecord::ID_KEY . ")\n"
+      . "\tPRIMARY KEY(" . SqlRecord::ID_KEY . "),\n"
       . "\t" . SqlRecord::CREATED_KEY . " " . self::$FUNDAMENTAL_DATA_TYPES[SqlRecord::CREATED_KEY] . ",\n"
       . "\t" . SqlRecord::LAST_UPDATED_TIME . " " . self::$FUNDAMENTAL_DATA_TYPES[SqlRecord::LAST_UPDATED_TIME] . ",\n";
   }
@@ -293,7 +326,50 @@ class Architect {
         ->build();
   }
 
-  private function createPhpFiles($database, $path) {
-     
+  /**
+   * genCreateAccessLayer()
+   * - Create access layer contents.
+   * @param database : Database
+   */
+  private function genCreateAccessLayer($database) {
+    $access_layer_contents = "<?php\n\n";
+    $access_layer_contents .= $this->genAccessLayerRequiresCode($database) . "\n\n";
+    $access_layer_contents .= $this->genDatabaseAccessLayerCode($database) . "\n\n"; 
+    $access_layer_contents .= $this->genTablesAccessLayerCode($database);
+    return $access_layer_contents;
+  }
+
+  /**
+   * genAccessLayerRequiresCode()
+   * - Return requires code for access layer.
+   * @param database : Database
+   * @return string : requires code for database
+   */
+  private function genAccessLayerRequiresCode($database) {
+    return "require_once(" . self::SQL_RECORD_GLOBAL_PATH . ")";
+  }
+
+  /**
+   * genDatabaseAccessLayerCode()
+   * - Return code for the database access layer class.
+   * @param database : Database
+   * @return string : code for database class. 
+   */
+  private function genDatabaseAccessLayerCode($database) {
+    $super_class_name = self::DB_SUPER_CLASS_NAME;
+    return 
+      "class {$database->getName()} extends {$super_class_name} {
+         protected static $dbName = {$database->getName()};      
+       }";
+  }
+
+  /**
+   * genTablesAccessLayerCode()
+   * - Return code for the tables access layer classes.
+   * @param database : Database
+   * @return string : code for table classes. 
+   */
+  private function genTablesAccessLayerCode($database) {
+    $table_map = $database->getTableMap();
   }
 }
