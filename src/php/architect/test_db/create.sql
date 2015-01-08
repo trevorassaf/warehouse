@@ -15,9 +15,11 @@ CREATE TABLE test_db.bar(
 
 ALTER TABLE test_db.foo
 	ADD COLUMN bar_id BIGINT UNSIGNED NOT NULL,
-	ADD FOREIGN KEY(bar_id) REFERENCES test_db.bar(id);
+	ADD FOREIGN KEY(bar_id) REFERENCES test_db.bar(id),
+	UNIQUE KEY(bar_id));
 
 ALTER TABLE test_db.bar
 	ADD COLUMN foo_id BIGINT UNSIGNED NOT NULL,
-	ADD FOREIGN KEY(foo_id) REFERENCES test_db.foo(id);
+	ADD FOREIGN KEY(foo_id) REFERENCES test_db.foo(id),
+	UNIQUE KEY(foo_id));
 

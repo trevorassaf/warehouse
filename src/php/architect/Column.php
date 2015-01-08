@@ -7,7 +7,6 @@ class ColumnBuilder {
     $dataType,
     $firstLength,
     $secondLength,
-    $isUnique,
     $allowsNull,
     $isReadOnly;
 
@@ -20,7 +19,6 @@ class ColumnBuilder {
     $this->dataType = null;
     $this->firstLength = null;
     $this->secondLength = null;
-    $this->isUnique = false;
     $this->allowsNull = false;
     $this->isReadOnly = false;
   }
@@ -66,17 +64,6 @@ class ColumnBuilder {
    */
   public function setSecondLength($second_length) {
     $this->secondLength = $second_length;
-    return $this;
-  }
-
-  /**
-   * setIsUnique()
-   * - Set second length 
-   * @param second_length : unsigned int 
-   * @return this
-   */
-  public function setIsUnique($is_unique) {
-    $this->isUnique = $is_unique;
     return $this;
   }
 
@@ -135,7 +122,6 @@ class ColumnBuilder {
       $this->dataType,
       $this->firstLength,
       $this->secondLength,
-      $this->isUnique,
       $this->allowsNull,
       $this->isReadOnly
     );
@@ -149,7 +135,6 @@ class Column {
     $dataType,
     $firstLength,
     $secondLength,
-    $isUnique,
     $allowsNull,
     $isReadOnly;
 
@@ -158,7 +143,6 @@ class Column {
     $data_type,
     $first_length,
     $second_length,
-    $isUnique,
     $allows_null,
     $is_read_only
   ) {
@@ -166,7 +150,6 @@ class Column {
     $this->dataType = $data_type;
     $this->firstLength = $first_length;
     $this->secondLength = $second_length;
-    $this->isUnique = $is_unique;
     $this->allowsNull = $allows_null;
     $this->isReadOnly = $is_foreign_key;
   }
@@ -223,15 +206,6 @@ class Column {
    */
   public function getSecondLength() {
     return $this->secondLength;
-  }
-
-  /**
-   * isUnique()
-   * - Return true iff column is unique.
-   * @return bool : is column unique
-   */
-  public function isUnique() {
-    return $this->isUnique;
   }
 
   /**

@@ -5,6 +5,8 @@ require_once("Database.php");
 
 class Architect {
 
+  const COLUMN_NAME_DELIMITER = '_';
+
   const DB_SUPER_CLASS_NAME = 'SqlRecord';
   const SQL_RECORD_GLOBAL_PATH = '';
 
@@ -124,12 +126,16 @@ class Architect {
     foreach ($table_map as $table_name => $table_with_mapping_set) {
       $table = $table_with_mapping_set->getTable();
       $create_table_query = $this->genCreateTableQueryHeader($database->getName(), $table_name);
-      foreach ($table->getColumnMap() as $column_name => $column) {
+      foreach ($table->getColumnWithInfoMap() as $column_name => $column_with_info) {
         // Fail due to invalid column name
         assert(!isset(self::$DISALLOWED_COLUMN_NAMES[$column_name]));
-
         // Accumulate table-creation query
-        $create_table_query .= "\t" . $this->genCreateColumnQuery($column) . ",\n";
+        $create_table_query .= "\t" . $this->genCreateColumnQuery($column_with_info->getColumn()) . ",\n";
+      }
+
+      // Add unique key constraints
+      foreach ($table->getUniqueColumnSetList() as $col_name_set) {
+        $create_table_query .= "\t" . $this->genCompositeKeyQuery($col_name_set);
       }
 
       // Terminate create table query and accumulate into create-all-tables query
@@ -197,6 +203,24 @@ class Architect {
   }
 
   /**
+   * genCompositeKeyQuery()
+   * - Return query component for creating a composite unique key constraint.
+   * @param col_name_set : set<string:column-name>
+   */
+  private function genCompositeKeyQuery($col_name_set) {
+    return 'UNIQUE KEY(' . implode(', ', $col_name_set) . ')';
+  }
+  
+  /**
+   * genUniqueKeyQuery()
+   * - Return query component for creating a unique key constraint.
+   * @param col_name_set : string:column-name
+   */
+  private function genUniqueKeyQuery($col_name) {
+    return "UNIQUE KEY({$col_name})";
+  }
+
+  /**
    * genCreateForeignKeyQuery()
    * - Return query creating foreign key column and constraint.
    * @param database_name : string
@@ -209,7 +233,7 @@ class Architect {
     return "ALTER TABLE {$database_name}.{$source_table_name}\n\tADD COLUMN {$fk_col_name} "
       . self::$FOREIGN_KEY_DATA_TYPES[SqlRecord::ID_KEY] . ",\n\t"
       . "ADD FOREIGN KEY({$fk_col_name}) REFERENCES {$database_name}.{$referenced_table_name}("
-      . SqlRecord::ID_KEY . ");";
+      . SqlRecord::ID_KEY . "),\n\t{$this->genUniqueKeyQuery($fk_col_name)});";
   }
 
   /**
@@ -221,7 +245,7 @@ class Architect {
    * @return string : query creating join table
    */
   private function genCreateJoinTableQuery($database_name, $source_table_name, $referenced_table_name) {
-    $join_table_name = $this->createJoinTableNameFromTableNames($database_name, $source_table_name, $referenced_table_name);        
+    $join_table_name = $this->createJoinTableNameWithDatabasePrefixFromTableNames($database_name, $source_table_name, $referenced_table_name);        
     $source_column_name = $this->createForeignKeyColumnName($source_table_name);
     $referenced_column_name = $this->createForeignKeyColumnName($referenced_table_name);
     $fk_data_type = self::$FOREIGN_KEY_DATA_TYPES[SqlRecord::ID_KEY];
@@ -253,7 +277,19 @@ class Architect {
       $high_lex = $table_name_a;  
     }
     
-    return "{$database_name}.{$low_lex}_{$high_lex}_join_table";
+    return "{$low_lex}_{$high_lex}_join_table";
+  }
+
+  /**
+   * createJoinTableNameWithDatabasePrefixFromTableNames()
+   * - Derive join table name from individual table names. Include database name prefix.
+   * @param database_name : string 
+   * @param table_name_a : string 
+   * @param table_name_b : string 
+   * @return string : name of join table
+   */
+  public static function createJoinTableNameWithDatabasePrefixFromTableNames($database_name, $table_name_a, $table_name_b) {
+    return $database_name . "." . self::createJoinTableNameFromTableNames($table_name_a, $table_name_b);
   }
 
   /**
@@ -274,9 +310,6 @@ class Architect {
    */
   private function genCreateColumnQuery($column) {
     $query = $column->getName() . " " . $this->genColumnDataTypeQueryComponent($column); 
-    if ($column->isUnique()) {
-      $query .= " UNIQUE";
-    }
     if (!$column->getAllowsNull()) {
       $query .= " NOT NULL";  
     }
@@ -370,6 +403,123 @@ class Architect {
    * @return string : code for table classes. 
    */
   private function genTablesAccessLayerCode($database) {
+    $tables_code = '';
     $table_map = $database->getTableMap();
+    foreach ($table_map as $table_name => $table_with_mapping_set) {
+      $header_code = "final class {$table_name} extends {$database->getName()} {\n";
+      $private_var_code = "private";
+      $getter_code = '';
+      $setter_code = '';
+      $edge_traversal_code = '';
+      $init_instance_vars_code = '';
+      $factory_code = '';
+
+      // Create ivar-related code
+      foreach ($table_with_mapping_set->getTable()->getColumnWithInfoMap() as $column_name => $column) {
+        $ivar_name_for_column = $this->convertColumnNameToInstanceVarName($column_name);
+        $private_var_code .= "\n\t\${$ivar_name_for_column},";
+        $getter_code .= $this->genGetterCodeForColumn($ivar_name_for_column) . "\n\n";
+        $setter_code .= $this->genSetterCodeForColumn($ivar_name_for_column) . "\n\n";
+      }
+
+      // Create edge-traversal code 
+      foreach ($table_with_mapping_set->getMappingSet() as $secondary_table_name => $mapping_type) {
+        switch ($mapping_type) {
+          case TableMappingType::ONE_TO_ONE:
+            $edge_traversal_code .= $this->genOneToOneEdgeCode($table_name, $secondary_table_name);
+            break;
+          case TableMappingType::MANY_TO_ONE:
+            $edge_traversal_code .= $this->genManyToOneEdgeCode($table_name, $secondary_table_name);
+            break;
+          case TableMappingType::MANY_TO_MANY:
+            $edge_traversal_code .= $this->genManyToManyEdgeCode($table_name, $secondary_table_name);
+            break;
+          default:
+            die("Shouldn't happen. Erroneaous mapping type: {$mapping_type}");
+        } 
+        
+        $edge_traversal_code .= "\n";
+      }
+
+      $tables_code .= "\n{$header_code}\n{$private_var_code}\n{$getter_code}\n{$setter_code}\n{$edge_traversal_code}";
+    }
+
+    echo $tables_code;
+  }
+
+  /**
+   * genOneToOneEdgeCode()
+   * - Return code for traversing a one-to-one edge.
+   * @param src_table_name : string : name of source table
+   * @param target_table_name : string : name of targe table
+   * @return string : traversal code
+   */
+  private function genOneToOneEdgeCode($src_table_name, $dest_table_name) {
+    $function_name = 'fetch' . $this->uccase($dest_table_name);
+    return "public function {$function_name}() {
+      return {$dest_table_name}::fetchUnique({$dest_table_name}::{$target_table_name}); 
+    }"; 
+  }
+
+  /**
+   * genManyToOneEdgeCode()
+   * - Return code for traversing a many-to-one edge.
+   * @param src_table_name : string : name of source table
+   * @param target_table_name : string : name of targe table
+   * @return string : traversal code
+   */
+  private function genManyToOneEdgeCode($src_table_name, $dest_table_name) {
+    $function_name = 'fetch' . $this->uccase($dest_table_name);
+    return "public function {$function_name}() {
+      return {$dest_table_name}::fetch({$dest_table_name}::{$target_table_name}); 
+    }"; 
+  }
+
+  /**
+   * genManyToManyEdgeCode()
+   * - Return code for traversing a many-to-many edge.
+   * @param src_table_name : string : name of source table
+   * @param target_table_name : string : name of targe table
+   * @return string : traversal code
+   */
+  private function genManyToManyEdgeCode($src_table_name, $dest_table_name) {
+    $function_name = 'fetch' . $this->uccase($dest_table_name) . "List";
+    $join_table_name = self::createJoinTableNameFromTableNames($src_table_name, $dest_table_name);
+    return "public function {$function_name}() {
+      \$id_list = {$join_table_name}::fetch(array({$join_table_name}::{$dest_table_name} => \$this->getId()));
+      return {$dest_table_name}::fetchByIds(\$id_list);
+    }";
+  }
+
+  /**
+   * uccase()
+   * - Return uppercammel case verison of str_in. Split on self::COLUMN_NAME_DELIMITER.
+   * @param str_in : string
+   * @return string : uppercammel case string
+   */
+  private function uccase($str_in) {
+    $tokens = explode(self::COLUMN_NAME_DELIMITER, $str_in);
+    for ($i = 1; $i < count($tokens); ++$i) {
+      $tokens[$i] = ucfirst($tokens[$i]); 
+    }
+    return ucfirst(implode('', $tokens));
+  }
+
+  private function genSetterCodeForColumn($ivar_name_for_column) {
+    $upper_camel_case_ivar_name = ucfirst($ivar_name_for_column);
+    return "public function set{$upper_camel_case_ivar_name}(\${$ivar_name_for_column}) { \$this->{$ivar_name_for_column} = \${$ivar_name_for_column}; }";
+  }
+
+  private function genGetterCodeForColumn($ivar_name_for_column) {
+    $upper_camel_case_ivar_name = ucfirst($ivar_name_for_column);
+    return "public function get{$upper_camel_case_ivar_name}() { return \$this->{$ivar_name_for_column}; }";
+  }
+
+  private function convertColumnNameToInstanceVarName($column_name) {
+    $tokens = explode(self::COLUMN_NAME_DELIMITER, $column_name);
+    for ($i = 1; $i < count($tokens); ++$i) {
+      $tokens[$i] = ucfirst($tokens[$i]); 
+    }
+    return implode('', $tokens);
   }
 }
