@@ -11,6 +11,7 @@ final class DataTypeName extends Enum {
   const BOOL = 'BIT'; 
   const STRING = 'VARCHAR';
   const TIMESTAMP = 'TIMESTAMP';
+  const FOREIGN_KEY = 'BIGINT UNSIGNED NOT NULL';
 
   protected static $SUPPORTED_TYPES = array(
     self::INT,

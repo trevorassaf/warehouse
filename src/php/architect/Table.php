@@ -1,35 +1,11 @@
 <?php
 
-final class ColumnWithInfo {
-
-  private
-    $column,
-    $isInUniqueColumnSetList;
-
-  public function __construct($column) {
-    $this->column = $column;
-    $this->isInUniqueColumnSetList = false;
-  }
-
-  public function getColumn() {
-    return $this->column;
-  }
-
-  public function getIsInUniqueColumnSetList() {
-    return $this->isInUniqueColumnSetList;
-  }
-
-  public function addColumnToUniqueList() {
-    $this->isInUniqueColumnSetList = true;
-  }
-}
-
 class Table {
 
   private
     $name,
     $uniqueColumnSetList,
-    $columnMap;
+    $columnSet;
 
   /**
    * __construct()
@@ -38,7 +14,7 @@ class Table {
   public function __construct($name) {
     $this->name = $name;
     $this->uniqueColumnSetList = array();
-    $this->columnMap = array();
+    $this->columnSet = array();
   }
 
   /**
@@ -56,9 +32,7 @@ class Table {
    * @param column : Column
    */
   public function addColumn($column) {
-    // Fail because column already registered
-    assert(!isset($this->columnMap[$column->getName()])); 
-    $this->columnMap[$column->getName()] = new ColumnWithInfo($column);
+    $this->columnSet[] = $column;
   }
 
   /**
@@ -66,25 +40,25 @@ class Table {
    * - Add set of columns to table.
    * @param column_list : array<Column>
    */
-  public function addColumns($column_list) {
+  public function addColumnSet($column_list) {
     foreach ($column_list as $column) {
       $this->addColumn($column);
     }
   } 
 
   /**
-   * geColumnMap()
-   * - Return column map
-   * @return Map<string:column-map, Column:column>
+   * geColumnSet()
+   * - Return column set. 
+   * @return Set<Column>
    */
-  public function getColumnWithInfoMap() {
-    return $this->columnMap;
+  public function getColumns() {
+    return $this->columnSet;
   }
 
   /**
    * getUniqueColumnSetList()
    * - Return list of unique column sets.
-   * @return array<set<string:column-name>>
+   * @return Set<Set<string:column-name>>
    */
   public function getUniqueColumnSetList() {
     return $this->uniqueColumnSetList;
@@ -93,35 +67,20 @@ class Table {
   /**
    * addCompositeKey()
    * - Make composite key from provided column name set
-   * @param column_name_set : set<string:column-name>
+   * @param column_name_set : Set<string:column-name>
    * @return void
    */
   public function addCompositeKey($column_name_set) {
-    foreach ($column_name_set as $column_name) {
-      // Fail due to nonextant column
-      assert(isset($this->columnMap[$column_name]));
-      // Fail due to previously registered unique column
-      assert(!$this->columnMap[$column_name]->getIsInUniqueColumnSetList());
-      
-      $this->columnMap[$column_name]->addColumnToUniqueList();
-    } 
-    
     $this->uniqueColumnSetList[] = $column_name_set;
   }
 
   /**
    * addUniqueKey()
    * - Make unique key from provided column name. 
-   * @param column_name_set : string:column-name>
+   * @param column_name : Set<string:column-name>
    * @return void
    */
   public function addUniqueKey($column_name) {
-    // Fail due to nonextant column
-    assert(isset($this->columnMap[$column_name]));
-    // Fail due to previously registered unique column
-    assert(!$this->columnMap[$column_name]->getIsInUniqueColumnSetList());
-    
-    $this->columnMap[$column_name]->addColumnToUniqueList();
-    $this->uniqueColumnSetList[] = array($column_name_set);
+    $this->uniqueColumnSetList[] = array($column_name);
   }
 }

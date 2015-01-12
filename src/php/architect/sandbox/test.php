@@ -2,11 +2,16 @@
 
 require_once(dirname(__FILE__)."/../Import.php");
 
+$arch = new Architect(
+    new SqlDbBuilder(),
+    new PhpAccessLayerBuilder()  
+);
+
 $test_db = new Database("test_db");
 
 $foo_table = new Table("foo");
 
-$test_db->setTable($foo_table);
+$test_db->addTable($foo_table);
 
 $foo_name_col_builder = new ColumnBuilder();
 $foo_name_col = $foo_name_col_builder
@@ -18,9 +23,8 @@ $foo_name_col = $foo_name_col_builder
 $foo_table->addColumn($foo_name_col);
 
 $bar_table = new Table("bar");
-$test_db->setTable($bar_table);
+$test_db->addTable($bar_table);
 
-$test_db->setTableMapping($foo_table, $bar_table, TableMappingType::ONE_TO_ONE);
+$test_db->addTableMapping($foo_table, $bar_table, TableMappingType::MANY_TO_MANY);
 
-$arch = new Architect();
 $arch->create($test_db, "./");

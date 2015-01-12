@@ -5,3 +5,7 @@ require_once("Table.php");
 require_once("Column.php");
 require_once("DataType.php");
 require_once("Architect.php");
+require_once("DbBuilder.php");
+require_once("AccessLayerBuilder.php");
+require_once("SqlDbBuilder.php");
+require_once("PhpAccessLayerBuilder.php");

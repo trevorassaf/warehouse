@@ -6,86 +6,57 @@ final class TableMappingType extends Enum {
 
   const ONE_TO_ONE = 0;
   const ONE_TO_MANY = 1;
-  const MANY_TO_ONE = 2;
-  const MANY_TO_MANY = 3;
+  const MANY_TO_MANY = 2;
 
-  private static $ASYMMETRIC_TYPE_TABLE = array(
-    self::ONE_TO_MANY => self::MANY_TO_ONE,
-    self::MANY_TO_ONE => self::ONE_TO_MANY,
-  );
-
-  public static function isAsymmetricType($mapping_type) {
-    static::validateType($mapping_type);
-    return isset(self::$ASYMMETRIC_TYPE_TABLE[$mapping_type]);
-  }
-
-  public static function getAsymmetricConjugateType($asymmetric_type) {
-    // Fail due to non-asymmetric type
-    assert(self::isAsymmetricType($asymmetric_type));
-    return self::$ASYMMETRIC_TYPE_TABLE[$asymmetric_type];
-  }
-  
   protected static $SUPPORTED_TYPES = array(
     self::ONE_TO_ONE,
     self::ONE_TO_MANY,
-    self::MANY_TO_ONE,
     self::MANY_TO_MANY,
   );
 }
 
-final class TableWithMappingSet {
+final class TableMapping {
 
   private
-    $table,
-    $mappingSet;
+    $primaryTable,
+    $secondaryTable,
+    $tableMappingType;
 
-  /**
-   * __construct()
-   * - Ctor for TableWithMappingSet
-   * @param table : Table
-   */
-  public function __construct($table) {
-    $this->table = $table;
-    $this->mappingSet = array();
+  public function __construct(
+    $primary_table,
+    $secondary_table,
+    $table_mapping_type
+  ) {
+    $this->primaryTable = $primary_table;
+    $this->secondaryTable = $secondary_table;
+    $this->tableMappingType = $table_mapping_type; 
   }
 
   /**
-   * getTable()
-   * - Return table.
-   * @return Tabe : table
+   * getPrimaryTable()
+   * - Return primary table.
+   * @return Table : primary table
    */
-  public function getTable() {
-    return $this->table;
+  public function getPrimaryTable() {
+    return $this->primaryTable;
   }
 
   /**
-   * hasMappingToTable()
-   * - Retun true iff mapping already exists for specified table.
-   * @param table_name : string
-   * @return bool : true iff mapping already exists.
+   * getSecondaryTable()
+   * - Return secondary table.
+   * @return Table : secondary table
    */
-  public function hasMappingToTable($table_name) {
-    return isset($this->mappingSet[$table_name]);
+  public function getSecondaryTable() {
+    return $this->secondaryTable;
   }
 
   /**
-   * getMappingSet()
-   * - Return mapping set.
-   * @return map<string:table-name, TableMappingType:mapping-type>
+   * getTableMappingType()
+   * - Return mapping type.
+   * @return TableMappingType
    */
-  public function getMappingSet() {
-    return $this->mappingSet;
-  }
-
-  /**
-   * addMapping()
-   * - Incorporate new table mapping.
-   * @param table_name : string
-   * @param mapping_type : TableMappingType
-   * @return void
-   */
-  public function addMapping($table_name, $mapping_type) {
-    $this->mappingSet[$table_name] = $mapping_type;
+  public function getTableMappingType() {
+    return $this->tableMappingType;
   }
 }
 
@@ -93,7 +64,9 @@ class Database {
 
   private
     $name,
-    $tableMap;
+    $tableSet,
+    $mappingSet,
+    $enumSet;
 
   /**
    * __construct()
@@ -102,7 +75,9 @@ class Database {
    */
   public function __construct($name) {
     $this->name = $name;
-    $this->tableMap = array();
+    $this->tableSet = array();
+    $this->mappingSet = array();
+    $this->enumSet = array();
   }
 
   /**
@@ -117,49 +92,57 @@ class Database {
   /**
    * getTableMap()
    * - Return table map
-   * @return Map<string:table-name, TableWithMappingSet>
+   * @return Map<string:table-name, Table>
    */
-  public function getTableMap() {
-    return $this->tableMap;
+  public function getTables() {
+    return $this->tableSet;
   }
 
   /**
-   * hasTable()
-   * - Return true iff table is set in db.
-   * @param table_name : string
-   * @return bool : true iff table is registered
+   * getMappingSet()
+   * - Return inter-table mapping set.
+   * @return Set<TableMapping>
    */
-  public function hasTable($table_name) {
-    return isset($this->tableMap[$table_name]);
+  public function getTableMappings() {
+    return $this->mappingSet;
   }
 
   /**
-   * getTable()
-   * - Fetch table by its name.
-   * @param table_name : string
-   * @return TableWithMappingSet : table associated with 'table_name'
+   * getEnumMap()
+   * - Return enum map.
+   * @return Set<Enum>
    */
-  public function getTableWithMappingSet($table_name) {
-    // Fail due to nonextant table
-    assert($this->hasTable($table_name));
-    return $this->tableMap[$table_name];
+  public function getEnums() {
+    return $this->enumSet; 
+  }
+
+  /**
+   * addEnum()
+   * - Add enum.
+   * @param enum : Enum
+   * @return void
+   */
+  public function addEnum($enum) {
+    $this->enumSet[] = $enum;
   }
 
   /**
    * setTable()
    * - Add new table to db
    * @param table : Table
+   * @return void
    */
-  public function setTable($table) {
+  public function addTable($table) {
     // Fail due to null table
     assert(isset($table));
-    $this->tableMap[$table->getName()] = new TableWithMappingSet($table);
+    $this->tableSet[] = $table;
   }
 
   /**
    * setTables()
    * - Add set of new tables to db
    * @param table_list : array<Table>
+   * @return void
    */
   public function setTables($table_list) {
     // Fail due to null table-list
@@ -178,9 +161,9 @@ class Database {
    * @param mapping_type : TableMappingType
    * @return void
    */
-  public function setTableMapping($primary_table, $secondary_table, $mapping_type) {
+  public function addTableMapping($primary_table, $secondary_table, $mapping_type) {
     // Fail due to unset mapping list
-    assert(isset($this->tableMap));
+    assert(isset($this->tableSet));
 
     // Fail due to unset primary-table
     assert(isset($primary_table));
@@ -191,30 +174,14 @@ class Database {
     // Fail due to unset mapping type 
     assert(isset($mapping_type));
 
-    // Register tables, if nonextant
-    if (!$this->hasTable($primary_table->getName())) {
-      $this->setTable($primary_table);
-    }
-    
-    if (!$this->hasTable($secondary_table->getName())) {
-      $this->setTable($secondary_table);
-    }
-
-    // Set mapping types
-    $primary_table_with_mapping = $this->getTableWithMappingSet($primary_table->getName());
-    $primary_table_with_mapping->addMapping($secondary_table->getName(), $mapping_type);
-
-    if (TableMappingType::isAsymmetricType($mapping_type)) {
-      $reciprocal_mapping_type = TableMappingType::getAsymmetricConjugateType($mapping_type);
-      $secondary_table_with_mapping = $this->getTableWithMappingSet($secondary_table->getName());
-      $secondary_table_with_mapping->addMapping($primary_table->getName(), $reciprocal_mapping_type);
-    }
+    $this->mappingSet[] = new TableMapping($primary_table, $secondary_table, $mapping_type);
   }
 
   /**
    * addTableMappings()
    * - Add inter-table-mappings to set.
    * @param array<InterTableMapping> : undirected edges between tables w/mapping type
+   * @return void
    */
   public function addTableMappings($table_mapping_list) {
     // Fail due to unset table_mapping_list

@@ -3,6 +3,7 @@
 require_once(dirname(__FILE__)."/AccessLayerObject.php");
 require_once(dirname(__FILE__)."/exceptions/InvalidUniqueKeyException.php");
 require_once(dirname(__FILE__)."/exceptions/InvalidObjectStateException.php");
+require_once(dirname(__FILE__)."/AccessLayerField.php");
 
 /**
  * Represents row in a sql table.
@@ -15,8 +16,6 @@ require_once(dirname(__FILE__)."/exceptions/InvalidObjectStateException.php");
  *   @requires defines 'compositeKeys' to indicate composite keys
  * 
  * Functions:
- *   @requires defines 'getDbFields()' for additional db fields
- *   @requires defines 'initInstanceVars()' for additional db fields
  *   @requires defines 'validateOrThrow()' to add validation logic
  *   @requires defines 'deleteChildren()' for records connected by foreign key
  *   @requires defines 'deleteAssets()' for records associated with other data outisde of db
@@ -27,6 +26,15 @@ abstract class SqlRecord extends AccessLayerObject {
   const ID_KEY = "id"; 
   const CREATED_KEY = "created"; 
   const LAST_UPDATED_TIME = "last_updated";
+
+  /**
+   * Db keys of parent instance.
+   */
+  private static $PARENT_DB_KEYS = array(
+    self::ID_KEY,
+    self::CREATED_KEY,
+    self::LAST_UPDATED_TIME,
+  );
   
   /**
    * List of alternate keys for this table. 'id' is always the primary key
@@ -71,11 +79,18 @@ abstract class SqlRecord extends AccessLayerObject {
    */
   private static $fetchRecordPreparedStatementsCacheTable = null;
 
-  // Db Fields
+  /**
+   * Parent db fields.
+   */
   private
     $id,
     $createdTime,
     $lastUpdatedTime;
+
+  /**
+   * Table for child db fields.
+   */
+  protected $childDbFieldTable;
 
   /**
    * True iff 'delete' has been called on this instance.
@@ -512,7 +527,7 @@ abstract class SqlRecord extends AccessLayerObject {
     // Create new record if indicated by client, otherwise fetch
     // from existing record
     if ($is_new_object) {
-      $this->initInstanceVars($init_params);
+      $this->setChildDbFieldTable($init_params);
       $this->validateOrThrow();
       $this->insertRecord($init_params);
     } else {
@@ -584,8 +599,7 @@ abstract class SqlRecord extends AccessLayerObject {
       self::ID_KEY => $this->id,
     );
 
-    $child_db_fields = $this->getDbFields();
-    $db_fields = array_merge($parent_db_fields, $child_db_fields);
+    $db_fields = array_merge($parent_db_fields, $this->childDbFieldTable);
     return $db_fields;
   }
 
@@ -594,27 +608,48 @@ abstract class SqlRecord extends AccessLayerObject {
    * - Initialize instance vars from raw sql record.
    */
   protected function initParentInstanceVars($init_params) {
+    // Init parent db keys
     $this->id = $init_params[self::ID_KEY];
     $this->createdTime = $init_params[self::CREATED_KEY];
     $this->lastUpdatedTime = $init_params[self::LAST_UPDATED_TIME];
 
     // Init child instance vars
-    $this->initInstanceVars($init_params);
+    $child_db_key_table = array_diff_key($init_params, self::$PARENT_DB_KEYS); 
+    $this->setChildDbFieldTable($child_db_key_table);
   }
 
   /**
-   * initInstanceVars()
-   * - Sets instance vars of object equal to corresponding parameters in $init_params.
-   * @param init_params: map of instance vars for this object (string:key => prim:value)
+   * setChildDbFieldTable()
+   * - Set ivar table for child instance.
+   * @param child_ivar_table : Map<string:field-key, mixed:field-value>
+   * @return void
    */
-  protected function initInstanceVars($init_params) {}
-  
+  private function setChildDbFieldTable($child_ivar_table) {
+    // Fail due to extant parent fields
+    assert($child_ivar_table == array_diff_key($child_ivar_table, self::$PARENT_DB_KEYS));
+
+    // Load child db table
+    if (!isset($this->childDbFieldTable)) {
+      $this->childDbFieldTable = $this->loadChildDbFieldTable();
+    }
+
+    // Set child db fields
+    foreach ($this->childDbFieldTable as $key => $access_layer_field) {
+      // Fail due to unset key
+      assert(isset($this->childDbFieldTable[$key]));
+      
+      if (isset($child_ivar_table)) {
+        $access_layer_field->setValue($child_ivar_table[$key]);
+      }
+    }
+  }
+
   /**
-   * getDbFields()
-   * - Returns map of fields to insert into db. Map is derived from object's instance variables
-   * (string:key => prim:value).
+   * loadChildDbFieldTable()
+   * - Return child db field table.
+   * @return Map<string:db-key, AccessLayerField>
    */
-  protected function getDbFields() { return array(); }
+  protected abstract function loadChildDbFieldTable();
 
   /**
    * validateOrThrow()
