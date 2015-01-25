@@ -46,6 +46,5 @@ class Architect {
     // Create warehouse files
     $this->dbBuilder->createDatabaseQueryFiles($database, $warehouse_path);
     $this->accessLayerBuilder->createAccessLayerFiles($database, $warehouse_path);
-    // $this->accessLayerBuilder->createAccessLayerFiles($database, $warehouse_path);       
   }
 }

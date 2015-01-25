@@ -96,7 +96,7 @@ abstract class PdoDbh extends DatabaseHandle {
    */ 
   public function isInTransaction() {
     try {
-      return $this->pdoDbHandle->isInTransaction();
+      return $this->pdoDbHandle->inTransaction();
     } catch (PDOException $e) {
       throw new DbhException($e, $this->prevQueryStr); 
     }
@@ -153,7 +153,7 @@ abstract class PdoDbh extends DatabaseHandle {
    */ 
   public function getLastInsertId() {
     try {
-      return $this->pdoDbHandle->getLastInsertId();
+      return $this->pdoDbHandle->lastInsertId();
     } catch (PDOException $e) {
       throw new DbhException($e, $this->prevQueryStr); 
     }

@@ -49,7 +49,7 @@ class PdoStmt implements PreparedStatement {
       $this->pdoStmt->bindValue(
           $param_name,
           $value,
-          $this->transalteDbParamType($type)
+          $this->translateDbParamType($type)
       );
     } catch (PDOException $e) {
       throw new DbhException($e); 
@@ -78,7 +78,7 @@ class PdoStmt implements PreparedStatement {
    * @param db_type : DataTypeName
    * @return PDO::PARAM_*
    */
-  private function transalteDbParamType($db_type) {
+  private function translateDbParamType($db_type) {
     // Fail due to invalid type
     assert(self::$PDO_TYPE_MAP[$db_type]);
     return self::$PDO_TYPE_MAP[$db_type];

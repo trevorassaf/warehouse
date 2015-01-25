@@ -54,7 +54,7 @@ class MySqlPdoDbh extends PdoDbh {
   protected function genPdoOptions($config) {
     return array(
       // TODO redo genPdoCharSetStr func!
-      PDO::MYSQL_ATTR_INIT_COMMAND => CharSet::genPdoCharSetStr($config->getCharSet()),
+      PDO::MYSQL_ATTR_INIT_COMMAND => $this->genPdoCharSetStr($config->getCharSet()),
       PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
       PDO::ATTR_EMULATE_PREPARES => false,
     ); 
@@ -66,7 +66,7 @@ class MySqlPdoDbh extends PdoDbh {
    * @param char_set : CharSet
    * @return string : pdo options string
    */
-  private function genPdoCharStr($char_set) {
+  private function genPdoCharSetStr($char_set) {
     CharSet::validateType($char_set);
     return self::PDO_CHAR_SET_PREFIX . $char_set; 
   }

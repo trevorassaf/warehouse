@@ -1,6 +1,8 @@
 <?php
 // -- DEPENDENCIES
 require_once("PdoFactory.php");
+require_once("DbhConfig.php");
+require_once("MySqlPdoFactory.php");
 
 abstract class AccessLayerObject {
 
@@ -15,8 +17,8 @@ abstract class AccessLayerObject {
    */
   public static function initDatabaseFactory($mysql_config) {
     // Initialize db factory
-    if (!isset(self::$databaseFactory)) {
-      self::$databaseFactory = MySqlPdoFactory::get($mysql_config); 
+    if (!isset(static::$databaseFactory)) {
+      static::$databaseFactory = MySqlPdoFactory::get($mysql_config); 
     }
   }
 
@@ -25,7 +27,7 @@ abstract class AccessLayerObject {
    * - Insert object into database and return model.
    * - @param init_params: map of params (string:param_name => string:value).
 	 */
-  protected abstract static function insert($init_params);
+  public abstract static function insert($init_params);
 
   /**
    * save()

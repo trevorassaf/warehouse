@@ -22,7 +22,7 @@ final class SqlDbBuilder implements DbBuilder {
   private static $DISALLOWED_COLUMN_NAMES = array(
       SqlRecord::ID_KEY,
       SqlRecord::CREATED_KEY,
-      SqlRecord::LAST_UPDATED_TIME,
+      SqlRecord::LAST_UPDATED_TIME_KEY,
   );
 
  /**
@@ -31,7 +31,7 @@ final class SqlDbBuilder implements DbBuilder {
   private static $FUNDAMENTAL_DATA_TYPES = array(
       SqlRecord::ID_KEY => "SERIAL",
       SqlRecord::CREATED_KEY => "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
-      SqlRecord::LAST_UPDATED_TIME => "TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
+      SqlRecord::LAST_UPDATED_TIME_KEY => "TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
   );
 
   /**
@@ -73,12 +73,13 @@ final class SqlDbBuilder implements DbBuilder {
    * @param path : string
    * @return void
    */
-  private function genDropDatabaseQueryFile($database, $path) {
-    $path = "{$path_to_dir}/" . self::DROP_DB_FILE_NAME;
+  private function genDropDatabaseQueryFile($database, $path_to_dir) {
+    // Create drop db query
     $drop_db_query = "DROP DATABASE {$database->getName()}";
 
-    echo "DROP DATABASE QUERY: \n\n{$drop_db_query}\n\n";
-    // file_put_contents($path, $drop_db_query);
+    // Create drop db file
+    $path = "{$path_to_dir}/" . self::DROP_DB_FILE_NAME;
+    file_put_contents($path, $drop_db_query);
   }
 
   /**
@@ -89,11 +90,12 @@ final class SqlDbBuilder implements DbBuilder {
    * @return void
    */
   private function genCreateDatabaseQueryFile($database, $path_to_dir) {
-    $path = "{$path_to_dir}/" . self::CREATE_DB_FILE_NAME;
+    // Generate create db query
     $create_database_query = $this->createDatabaseQuery($database);
 
-    echo "CREATE DATABASE QUERIES: \n\n{$create_database_query}\n\n";
-    // file_put_contents($path, $create_database_query);
+    // Create file 
+    $path = "{$path_to_dir}/" . self::CREATE_DB_FILE_NAME;
+    file_put_contents($path, $create_database_query);
     // TODO more error checking here
   }
 
@@ -137,11 +139,19 @@ final class SqlDbBuilder implements DbBuilder {
    * @return string : create table query
    */
   private function genCreateTableQuery($db_name, $table) {
+    // Create table definition header
     $create_table_query = $this->genCreateTableQueryHeader($db_name, $table->getName());
+    
+    // Add column definitions
     foreach ($table->getColumns() as $column) {
       // Fail due to invalid column name
       assert(!isset(self::$DISALLOWED_COLUMN_NAMES[$column->getName()])); 
       $create_table_query .= "\t{$this->genCreateColumnQuery($column)},\n";
+    }
+
+    // Add unique key definitions
+    foreach ($table->getUniqueColumnSetList() as $col_set) {
+      $create_table_query .= "\t{$this->genUniqueKeyQuery($col_set)},\n";
     }
     
     return substr($create_table_query, 0, -2) . ");";
@@ -159,7 +169,7 @@ final class SqlDbBuilder implements DbBuilder {
       . "\t" . SqlRecord::ID_KEY . " " . self::$FUNDAMENTAL_DATA_TYPES[SqlRecord::ID_KEY]. ",\n"
       . "\tPRIMARY KEY(" . SqlRecord::ID_KEY . "),\n"
       . "\t" . SqlRecord::CREATED_KEY . " " . self::$FUNDAMENTAL_DATA_TYPES[SqlRecord::CREATED_KEY] . ",\n"
-      . "\t" . SqlRecord::LAST_UPDATED_TIME . " " . self::$FUNDAMENTAL_DATA_TYPES[SqlRecord::LAST_UPDATED_TIME] . ",\n";
+      . "\t" . SqlRecord::LAST_UPDATED_TIME_KEY . " " . self::$FUNDAMENTAL_DATA_TYPES[SqlRecord::LAST_UPDATED_TIME_KEY] . ",\n";
   }
 
   /**
@@ -217,7 +227,7 @@ final class SqlDbBuilder implements DbBuilder {
    * @param table_name_b : string 
    * @return string : name of join table
    */
-  public static function genJoinTableName($database_name, $table_name_a, $table_name_b) {
+  public static function genJoinTableName($table_name_a, $table_name_b) {
    // Order tables lexicographically 
     $low_lex = '';
     $high_lex = '';
@@ -238,28 +248,24 @@ final class SqlDbBuilder implements DbBuilder {
    * @param referenced_table_name : string
    * @return string : name of foreign key column
    */
-  private function genForeignKeyColumnName($referenced_table_name) {
+  public static function genForeignKeyColumnName($referenced_table_name) {
     return $referenced_table_name . "_" . SqlRecord::ID_KEY;
   }
 
   /**
-   * genCompositeKeyQuery()
+   * genUniqueKeyQuery()
    * - Return query component for creating a composite unique key constraint.
    * @param col_name_set : set<string:column-name>
    */
-  private function genCompositeKeyQuery($col_name_set) {
-    return 'UNIQUE KEY(' . implode(', ', $col_name_set) . ')';
+  private function genUniqueKeyQuery($col_set) {
+    $unique_key_str = "UNIQUE KEY(";
+    foreach ($col_set as $col) {
+      $unique_key_str .= "{$col->getName()}, ";
+    }
+
+    return substr($unique_key_str, 0, -2) . ')';
   }
   
-  /**
-   * genUniqueKeyQuery()
-   * - Return query component for creating a unique key constraint.
-   * @param col_name_set : string:column-name
-   */
-  private function genUniqueKeyQuery($col_name) {
-    return "UNIQUE KEY({$col_name})";
-  }
-
   /**
    * genCreateForeignKeyQuery()
    * - Return query creating foreign key column and constraint.
@@ -299,7 +305,7 @@ final class SqlDbBuilder implements DbBuilder {
     $secondary_table_name
   ) {
     // Look up sql data type
-    $fk_col_name = $this->genForeignKeyColumnName($secondary_table_name);
+    $fk_col_name = self::genForeignKeyColumnName($secondary_table_name);
     $sql_data_type_string = self::$FOREIGN_KEY_DATA_TYPES[SqlRecord::ID_KEY];
     
     // Generate fully qualified name
@@ -362,8 +368,7 @@ final class SqlDbBuilder implements DbBuilder {
     $secondary_table_name = $table_mapping->getSecondaryTable()->getName();
 
     // Create join table name
-    $join_table_name = $this->genJoinTableName(
-        $database_name,
+    $join_table_name = self::genJoinTableName(
         $table_mapping->getPrimaryTable()->getName(),
         $table_mapping->getSecondaryTable()->getName()
     );
@@ -378,8 +383,8 @@ final class SqlDbBuilder implements DbBuilder {
     
     $fk_data_type = self::$FOREIGN_KEY_DATA_TYPES[SqlRecord::ID_KEY];
     $id_column_name = SqlRecord::ID_KEY;
-    $source_column_name = $this->genForeignKeyColumnName($primary_table_name);
-    $referenced_column_name = $this->genForeignKeyColumnName($secondary_table_name);
+    $source_column_name = self::genForeignKeyColumnName($primary_table_name);
+    $referenced_column_name = self::genForeignKeyColumnName($secondary_table_name);
 
     return "CREATE TABLE {$fully_qualified_join_table_name}(
         {$source_column_name} {$fk_data_type},

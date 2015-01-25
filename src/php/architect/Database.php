@@ -25,7 +25,7 @@ final class TableMapping {
   public function __construct(
     $primary_table,
     $secondary_table,
-    $table_mapping_type
+    $table_mapping_type 
   ) {
     $this->primaryTable = $primary_table;
     $this->secondaryTable = $secondary_table;

@@ -8,44 +8,54 @@ require_once(dirname(__FILE__)."/AccessLayerField.php");
 /**
  * Represents row in a sql table.
  *
- * Child class definitions:
- *   @requires class name matches table name 
+ * ---- Public static functions ----
+ * - List<SqlRecord> fetchAll()               : fetch all records from table
+ * - void deleteAll()                         : remove all records from table
+ * - List<SqlRecord >fetch(field-map)         : fetch record set from table 
+ * - SqlRecord fetchById(id)                  : fetch single record by id
+ * - SqlRecord fetchByKey(name, value)        : fetch single record by key
+ * - SqlRecord fetchByCompositeKey(field-map) : fetch single record by composite record
+ * - SqlRecord insert(field-map)              : insert record into db with field-map  
+ *
+ * ---- Public methods ----
+ * - delete()             : remove record and related assets, disable instance
+ * - save()               : update record
+ * - getId()              : return record id
+ * - getCreatedTime()     : return created time of this record
+ * - getLastUpdatedTime() : return last updated time of this record
+ *
+ * ---- Child class requirements ---- 
+ * Naming:
+ *   @require class name matches table name 
+ *
+ * Hierarchy:
+ *   @require database classes inherit from this class
+ *   @require table classes inherit from corresponding database class
  * 
  * Vars:
- *   @requires defines 'alternateKeys' to indicate alternate keys 
- *   @requires defines 'compositeKeys' to indicate composite keys
+ *   @require defines 'alternateKeys' to indicate alternate keys 
+ *   @require defines 'compositeKeys' to indicate composite keys
  * 
- * Functions:
- *   @requires defines 'validateOrThrow()' to add validation logic
- *   @requires defines 'deleteChildren()' for records connected by foreign key
- *   @requires defines 'deleteAssets()' for records associated with other data outisde of db
+ * Mandatory Functions:
+ *   @require defines 'genChildDbFieldTableTemplate()' to define the table's fields
+ *
+ * Optional Functions:
+ *   @option defines 'validateOrThrow()' to add validation logic
+ *   @option defines 'deleteChildren()' for records connected by foreign key
+ *   @option defines 'deleteAssets()' for records associated with other data outisde of db
+ * -------------------------------
  */
 abstract class SqlRecord extends AccessLayerObject {
   
   // Db Keys
   const ID_KEY = "id"; 
   const CREATED_KEY = "created"; 
-  const LAST_UPDATED_TIME = "last_updated";
+  const LAST_UPDATED_TIME_KEY = "last_updated";
 
   /**
-   * Db keys of parent instance.
+   * List of keys for this table.
    */
-  private static $PARENT_DB_KEYS = array(
-    self::ID_KEY,
-    self::CREATED_KEY,
-    self::LAST_UPDATED_TIME,
-  );
-  
-  /**
-   * List of alternate keys for this table. 'id' is always the primary key
-   * and needn't be included in this list.
-   */
-  protected static $alternateKeys = array();
-
-  /**
-   * List of composite keys for this table.
-   */
-  protected static $compositeKey = array();
+  protected static $keys = array();
 
   /**
    * Handle to the database connection.
@@ -73,7 +83,6 @@ abstract class SqlRecord extends AccessLayerObject {
   private static $insertRecordPreparedStatementCache = null;
 
   /**
-
    * Cached prepared statements for fetching records from this table.
    * Map of string:query-str => PDOStatement:prepared-statement
    */
@@ -82,10 +91,7 @@ abstract class SqlRecord extends AccessLayerObject {
   /**
    * Parent db fields.
    */
-  private
-    $id,
-    $createdTime,
-    $lastUpdatedTime;
+  private $parentDbFieldTable;
 
   /**
    * Table for child db fields.
@@ -118,7 +124,7 @@ abstract class SqlRecord extends AccessLayerObject {
     assert(!isset(self::$databaseHandle));
 
     // Fail due to uninitialized database factory
-    assert(isset(self::$databaseFactory));
+    assert(isset(static::$databaseFactory));
 
     try {
       // Initialize db connection
@@ -153,19 +159,18 @@ abstract class SqlRecord extends AccessLayerObject {
     // Fail due to non-existant transaction
     assert(isset(self::$databaseHandle));
 
-    // Conclude transaction
     try {
+      // Conclude transaction
       self::$databaseHandle->commit();
+      // Close connection 
+      self::$databaseHandle = null;
     } catch (PDOException $e) {
       self::$databaseHandle->rollback();
       die("\nERROR: " . $e->getMessage() . "\n");
     }
 
-    // Remove assets from file system.
+    // Remove assets
     self::deleteAssets();
-
-    // Close connection 
-    self::$databaseHandle = null;
 
     // Invalidate prepared statement cache
     self::$fetchAllRecordsPreparedStatementCache = null;
@@ -187,7 +192,7 @@ abstract class SqlRecord extends AccessLayerObject {
     }
 
     // Cache calling subclass name 
-    $called_class_name = get_called_class();
+    $table_name = static::getTableName();
     
     // Begin implicit transaction if explicit one doesn't exist
     $is_implicit_tx = false;
@@ -196,21 +201,22 @@ abstract class SqlRecord extends AccessLayerObject {
       self::beginTx();
     }
     
-    // Fail due to invalid database connection
+    // Fail because 'databaseHandle' wasn't initialized by 'beginTx()'
     assert(isset(self::$databaseHandle));
 
     try {
       // Create prepared statement if nonextant 
-      if (!isset(self::$fetchAllRecordsPreparedStatementCache[$called_class_name])) {
-        $query_str = "SELECT * FROM " . $called_class_name;
-        self::$fetchAllRecordsPreparedStatement[$called_class_name] =
+      if (!isset(self::$fetchAllRecordsPreparedStatementCache[$table_name])) {
+        $fully_qualified_table_name = static::getFullyQualifiedTableName();
+        $query_str = "SELECT * FROM {$fully_qualified_table_name}";
+        self::$fetchAllRecordsPreparedStatementCache[$table_name] =
             self::$databaseHandle->prepare($query_str); 
       } 
 
       // Fetch all records
-      $fetch_all_stmt = self::$fetchAllRecordsPreparedStatementCache[$called_class_name]; 
+      $fetch_all_stmt = self::$fetchAllRecordsPreparedStatementCache[$table_name]; 
       $fetch_all_stmt->execute();
-      $raw_record_set = $fetch_all_stmt->fetchAll();
+      $raw_record_set = $fetch_all_stmt->fetchAllRows();
       
       // Conclude implicit tx
       if ($is_implicit_tx) {
@@ -222,6 +228,7 @@ abstract class SqlRecord extends AccessLayerObject {
       foreach ($raw_record_set as $raw_record) {
         $record_objects[] = new static($raw_record); 
       }
+
       return $record_objects;
     } catch (PDOException $e) {
       self::$databaseHandle->rollback();
@@ -241,7 +248,7 @@ abstract class SqlRecord extends AccessLayerObject {
       self::beginTx();
     }
 
-    // Fail due to invalid database connection
+    // Fail because 'databaseHandle' wasn't initialized by 'beginTx()' 
     assert(isset(self::$databaseHandle));
 
     try {
@@ -259,146 +266,74 @@ abstract class SqlRecord extends AccessLayerObject {
       self::endTx();
     }
   }
-
-  /**
-   * insert()
-   * @Override AccessLayerObject
-   */
-  protected static function insert($init_params) {
-    return new static($init_params, true);
-  }
-
-  /**
-   * fetchByCompositeKey()
-   * - Fetch sql record from db by composite key.
-   * @return SqlRecord instance
-   */
-  protected static function fetchByCompositeKey($composite_key) {
-    // Fail due to invalid composite key
-    assert(static::isValidCompositeKey($composite_key));
-
-    // Fetch sql records 
-    $results = static::fetchByParams($composite_key);
-
-    // Return null, because query didn't match any record
-    $num_results = count($results);
-    if ($num_results == 0) {
-      return null;
-    } 
-
-    // Return single sql record
-    if ($num_results == 1) {
-      return $results[0];
-    } 
-
-    // Failed due to composite key misuse 
-    assert(false, "Fetch by composite key returned multiple records.");
-  }
   	
-	/**
-   * fetchByUniqueKey()
-   * - Fetch sql record from db by key.
-   */
-  protected static function fetchByKey($key, $value) {
-    // Fail due to invalid alternate key
-    assert(static::isValidKey($key));
-
-    // Fetch object
-    $results = static::fetchByParams(
-      array($key => $value)
-    );
-
-    // Return null, because query didn't match any record
-    $num_results = count($results);
-    if ($num_results == 0) {
-      return null;
-    } 
-
-    // Return single sql record
-    if ($num_results == 1) {
-      return $results[0];
-    } 
-
-    // Failed due to candidate key misuse 
-    assert(false, "Candidate key returned multiple records.");
-  }
-
   /**
    * isValidKey()
-   * - Return true iff key is a candidate key for this object.
-   * @param key : string representing db table key
+   * - Return true iff 'composite_key' is valid composite key.
+   * @param param_map : Map<string:key, mixed:value>
    */
-  private static function isValidKey($key) {
-    // Return true if 'key' corresponds to the primary key 
-    if ($key == self::ID_KEY) {
+  private static function isValidKey($param_map) {
+    // Any 'param-map' containing 'id' key is valid
+    if (isset($param_map[self::ID_KEY])) {
       return true;
     }
 
-    // Return true if 'key' is valid alternate key
-    foreach (static::$alternateKeys as $alternate_key) {
-      if ($key == $alternate_key) {
-        return true;
-      }
+    // Return false if no unique keys exist
+    if (empty(static::$keys)) {
+      return false;
     }
 
-    return false;
-  }
+    $param_map_size = count($param_map);
 
-  /**
-   * isValidCompositeKey()
-   * - Return true iff 'composite_key' is valid composite key.
-   */
-  private static function isValidCompositeKey($composite_key) {
-    $count_composite_key = count($composite_key);
-    foreach (static::$compositeKeys as $valid_composite_key) {
+    foreach (static::$keys as $valid_key_set) {
       // Skip if the number of elements don't match
-      if ($count_composite_key != count($valid_composite_key)) {
+      $vck_size = count($valid_key_set);
+      if ($param_map_size < $vck_size) {
         continue;
       }
 
       // Number of elements match, so check value equalities 
       $num_matched_keys = 0;
-      foreach ($valid_composite_key as $vck_element) {
-        foreach ($composite_key as $ck_element) {
-          if ($vck_element == $ck_element) {
+      foreach ($valid_key_set as $vck_element) {
+        foreach ($param_map as $param_name => $param_value) {
+          if ($vck_element == $param_name) {
             ++$num_matched_keys;
           }
         }   
       }
 
       // Provided composite key is valid 
-      if ($num_matched_keys == $count_composite_key) {
+      if ($num_matched_keys == $vck_size) {
         return true;
       }
     }
-
     return false;
   }
   
   /** 
-   * fetchByParams()
+   * fetch()
    * - Fetch all records matching 'params'. Records fetched from table
    *   associated with calling class.
    * @param params : Map(string:key => Value:value)
    */
-	protected static function fetchByParams($params) {
-    // Cache calling subclass name
-    $called_class_name = get_called_class();
+	public static function fetch($param_map) {
+    // Cache table name 
+    $table_name = static::getTableName();
     
     // Generate db query
-    $query_str = self::genFetchByParamsQuery($params);
+    $query_str = self::genFetchByParamsQuery($param_map);
 
     // Initialize cache, if necessary
     if (!isset(self::$fetchRecordPreparedStatementsCacheTable)) {
       self::$fetchRecordPreparedStatementsCacheTable = array();
     }
     
-    if (!isset(self::$fetchRecordPreparedStatementsCacheTable[$called_class_name])) {
-      self::$fetchRecordPreparedStatementsCacheTable[$called_class_name] = array();
+    if (!isset(self::$fetchRecordPreparedStatementsCacheTable[$table_name])) {
+      self::$fetchRecordPreparedStatementsCacheTable[$table_name] = array();
     }
 
     // Cache fetch record
-    $fetch_record_cache = self::$fetchRecordPreparedStatementsCacheTable[$called_class_name];
+    $fetch_record_cache = self::$fetchRecordPreparedStatementsCacheTable[$table_name];
 
     // Initiate implicit transaction, if necessary
     $is_implicit_tx = false;
@@ -417,17 +352,25 @@ abstract class SqlRecord extends AccessLayerObject {
       }
 
       // Fetch record
+      $parent_db_field_map = static::genParentDbFieldTableTemplate();
+      $child_db_field_map = static::genChildDbFieldTableTemplate(); 
+      $db_field_map = array_merge($parent_db_field_map, $child_db_field_map);
+      
       $fetch_stmt = $fetch_record_cache[$query_str];
-      foreach ($params as $p) {
-        $key_for_prepared_statement = self::transformForPreparedStatement($p->getKeyName()); 
+      foreach ($param_map as $p_name => $p_value) {
+        // Fail due to invalid field name
+        assert(isset($db_field_map[$p_name]));
+
+        // Bind value to field in prepared statement
+        $key_for_prepared_statement = self::transformForPreparedStatement($p_name); 
         $fetch_stmt->bindValue(
             $key_for_prepared_statement,
-            $p->getValue(),
-            $p->getType()
+            $p_value,
+            $db_field_map[$p_name]->getDataType()
         );
       }
       $fetch_stmt->execute();
-      $raw_record_set = $fetch_stmt->fetchAll();
+      $raw_record_set = $fetch_stmt->fetchAllRows();
 
       // Close implicit tx
       if ($is_implicit_tx) {
@@ -464,11 +407,12 @@ abstract class SqlRecord extends AccessLayerObject {
    * @param params: map of parameters (string:key => prim:value)
    * @return string : query string
    */
-  private static function genFetchByParamsQuery($params) {
-    $query = "SELECT * FROM " . get_called_class() . " WHERE ";
-    foreach ($params as $p) {
-      $transformed_key_name = self::transformForPreparedStatement($p->getKeyName());
-      $query .= $p->getKeyName() .'=' . $transformed_key_name;
+  private static function genFetchByParamsQuery($param_map) {
+    $fully_qualified_table_name = static::getFullyQualifiedTableName();
+    $query = "SELECT * FROM {$fully_qualified_table_name} WHERE ";
+    foreach ($param_map as $p_name => $p_value) {
+      $transformed_key_name = self::transformForPreparedStatement($p_name);
+      $query .= $p_name .'=' . $transformed_key_name;
       $query .= ' AND ';
     }
     
@@ -483,19 +427,16 @@ abstract class SqlRecord extends AccessLayerObject {
    * @return string : query string
 	 */
   private static function genInsertRecordQuery($init_params) {
-    $query = "INSERT INTO " . get_called_class() . " (";
+    $fully_qualified_table_name = static::getFullyQualifiedTableName();
+    $database_name =  
+    $query = "INSERT INTO {$fully_qualified_table_name} (";
 		$values_string = ") VALUES (";
-		foreach ($init_params as $param) {
-      // Skip key if value is null
-      if ($param->getValue() === null) {
-        continue;
-      }
-      
-      $query .= $param->getKeyName() . ", ";
+		foreach ($init_params as $name => $value) {
+      $query .= $name . ", ";
 
       // Accumulate value specification string with PDO param bindings 
-      $transformed_key_name = self::transformForPreparedStatement($param->getKeyName());
-      $values_string .= "'$transformed_key_name', "; 
+      $transformed_key_name = self::transformForPreparedStatement($name);
+      $values_string .= "$transformed_key_name, "; 
 		}
     
     // Trim redundant commas from strings
@@ -510,42 +451,73 @@ abstract class SqlRecord extends AccessLayerObject {
    * fetchById()
    * - Fetch sql record with specified id.
    * @param id : unsigned int 
+   * @return SqlRecord : record
    */
   public static function fetchById($id) {
     return static::fetchByKey(self::ID_KEY, $id);
-	}
+  }
+
+  /**
+   * fetchByKey()
+   * - Fetch sql record with specified unique key.
+   * @param key : name of field
+   * @param value : value of field
+   * @return SqlRecord : record
+   */
+  public static function fetchByKey($key, $value) {
+    $param_map = array($key => $value);   
+    return static::fetchByCompositeKey($param_map);
+  }
+
+  /**
+   * fetchByCompositeKey()
+   * - Fetch sql record with specified params.
+   * @param param_map : Map<string:field-name, mixed:values>
+   * @return SqlRecord : record
+   */
+  public static function fetchByCompositeKey($param_map) {
+    // Fail due to invalid key
+    assert(self::isValidKey($param_map));  
+    
+    $sql_record_results = static::fetch($param_map);
+
+    // Return null if no matching record
+    if (empty($sql_record_results)) {
+      return null;
+    }
+
+    // Fail because 'sql_record_results' should countain at most 1 element 
+    assert(count($sql_record_results) == 1);
+
+    return $sql_record_results[0];
+  }
   
   /**
    * __construct()
    * - Initializes SqlRecord object. Inserts row if 'is_new_object' == true.
-   * @param init_params: map of instance vars for the object (string:key => prim:value)
+   * @param init_params : map of instance vars for the object (string:key => prim:value)
    */
-  protected function __construct($init_params, $is_new_object=false) {
+  protected function __construct($init_params) {
     // Inidicate this instance's association with stored db record 
     $this->hasBeenDeleted = false;
-    
-    // Create new record if indicated by client, otherwise fetch
-    // from existing record
-    if ($is_new_object) {
-      $this->setChildDbFieldTable($init_params);
-      $this->validateOrThrow();
-      $this->insertRecord($init_params);
-    } else {
-      $this->initParentInstanceVars($init_params);
-    }
+
+    // Initialize and set values in field table
+    $this->initDbFieldTables($init_params);
+    $this->validateOrThrow();
   }
 
   /**
    * insertRecord()
-   * - Transform 'init_params' into record. 
+   * @override AccessLayerObject
    */
-  private function insertRecord($init_params) {
+  public static function insert($param_table) {
+    // Fail because 'param_table' contains parent fields when it shouldn't
+    assert($param_table == array_diff_key($param_table, static::genParentDbFieldTableTemplate()));
+    
     // Initialize insert record cache, if nonextant
     if (!isset(self::$insertRecordPreparedStatementCache)) {
       self::$insertRecordPreparedStatementCache = array();
     }
-
-    $called_class_name = get_called_class();
 
     // Initiate implicit transaction, if no explicit transaction
     $is_implicit_tx = false;
@@ -556,29 +528,36 @@ abstract class SqlRecord extends AccessLayerObject {
 
     // Fail due to invalid database connection
     assert(isset(self::$databaseHandle));
+    
+    // Insert params as new record
+    $record = null;
+    $table_name = static::getTableName();
 
     try {
-      // Create prepared statement if necessary 
-      if (!isset(self::$insertRecordPreparedStatementCache[$called_class_name])) {
-        $insert_query = static::genInsertRecordQuery($init_params);
-        self::$insertRecordPreparedStatementCache[$called_class_name] = 
+      // Create and register new prepared statement, if nonextant 
+      if (!isset(self::$insertRecordPreparedStatementCache[$table_name])) {
+        $insert_query = static::genInsertRecordQuery($param_table);
+        self::$insertRecordPreparedStatementCache[$table_name] = 
             self::$databaseHandle->prepare($insert_query);
       }
 
-      $insert_stmt = self::$insertRecordPreparedStatementCache[$called_class_name];
-
-      // Bind params to query
-      foreach ($init_params as $field) {
+      // Bind child params to prepared statement
+      $insert_stmt = self::$insertRecordPreparedStatementCache[$table_name];
+      $child_db_field_table = static::genChildDbFieldTable($param_table);
+      foreach ($child_db_field_table as $field_name => $field) {
         $insert_stmt->bindValue(
-            self::transformForPreparedStatement($field->getKeyName()),
+            self::transformForPreparedStatement($field_name),
             $field->getValue(),
-            $field->getType()
+            $field->getDataType()
         );
       }
 
       // Insert record
       $insert_stmt->execute();
-      $this->id = self::$databaseHandle->lastInsertId(); 
+      $id = self::$databaseHandle->getLastInsertId(); 
+
+      // Fetch record from db and extrude to object 
+      $record = static::fetchById($id);
     } catch (PDOException $e) {
       self::$databaseHandle->rollback();
       die("\nERROR: " . $e->getMessage() . "\n");
@@ -588,68 +567,77 @@ abstract class SqlRecord extends AccessLayerObject {
     if ($is_implicit_tx) {
       self::endTx();
     }
+
+    return $record;
   }
 
   /**
-   * getParentDbFields()
-   * - Generate field set for inserting record into db.
+   * genChildDbFieldTable()
+   * - Return child db field table with values in field-table bound
+   *    to the AccessLayerFields.
+   * @param field_table : Map<string:field-key, mixed:field-value>
+   * @return Map<string:db-key, AccessLayerField>
    */
-  protected function getParentDbFields() {
-    $parent_db_fields = array(
-      self::ID_KEY => $this->id,
+  private static function genChildDbFieldTable($param_table) {
+    $child_db_field_table = static::genChildDbFieldTableTemplate(); 
+    self::bindValuesToDbTable($param_table, $child_db_field_table);
+    return $child_db_field_table;
+  }
+
+  /**
+   * genChildDbFieldTableTemplate()
+   * - Return child db field table with null values for access layer fields.
+   * - Intended to be overridden by child classes.
+   * @return Map<string:db-key, AccessLayerField>
+   */
+  protected static function genChildDbFieldTableTemplate() { return array(); }
+
+  /**
+   * genParentDbFieldTableTemplate()
+   * - Return parent db field table.
+   * @return Map<string:db-key, AccessLayerField>
+   */
+  private static function genParentDbFieldTableTemplate() {
+    return array(
+      self::ID_KEY => new AccessLayerField(DataTypeName::UNSIGNED_INT),
+      self::CREATED_KEY => new AccessLayerField(DataTypeName::TIMESTAMP),
+      self::LAST_UPDATED_TIME_KEY => new AccessLayerField(DataTypeName::TIMESTAMP),
     );
-
-    $db_fields = array_merge($parent_db_fields, $this->childDbFieldTable);
-    return $db_fields;
-  }
+  } 
 
   /**
-   * initParentInstanceVars()
-   * - Initialize instance vars from raw sql record.
-   */
-  protected function initParentInstanceVars($init_params) {
-    // Init parent db keys
-    $this->id = $init_params[self::ID_KEY];
-    $this->createdTime = $init_params[self::CREATED_KEY];
-    $this->lastUpdatedTime = $init_params[self::LAST_UPDATED_TIME];
-
-    // Init child instance vars
-    $child_db_key_table = array_diff_key($init_params, self::$PARENT_DB_KEYS); 
-    $this->setChildDbFieldTable($child_db_key_table);
-  }
-
-  /**
-   * setChildDbFieldTable()
-   * - Set ivar table for child instance.
-   * @param child_ivar_table : Map<string:field-key, mixed:field-value>
+   * bindValuesToDbTable()
+   * - Bind values in 'param_table' to AccessLayerFields in 'db_field_table'
+   * @param param_table : Map<string:key, mixed:value>
+   * @param db_field_table : Map<string:key, AccessLayerField:field>
    * @return void
    */
-  private function setChildDbFieldTable($child_ivar_table) {
-    // Fail due to extant parent fields
-    assert($child_ivar_table == array_diff_key($child_ivar_table, self::$PARENT_DB_KEYS));
-
-    // Load child db table
-    if (!isset($this->childDbFieldTable)) {
-      $this->childDbFieldTable = $this->loadChildDbFieldTable();
-    }
-
-    // Set child db fields
-    foreach ($this->childDbFieldTable as $key => $access_layer_field) {
-      // Fail due to unset key
-      assert(isset($this->childDbFieldTable[$key]));
-      
-      if (isset($child_ivar_table)) {
-        $access_layer_field->setValue($child_ivar_table[$key]);
+  private static function bindValuesToDbTable($param_table, $db_field_table) {
+    foreach ($db_field_table as $field_name => $field) {
+      // Bind param, if it exists. Otherwise, leave as null.
+      if (isset($param_table[$field_name])) {
+        $field->setValue($param_table[$field_name]);
       }
     }
   }
 
   /**
-   * loadChildDbFieldTable()
-   * - Return child db field table.
-   * @return Map<string:db-key, AccessLayerField>
+   * initDbFieldTables()
+   * - Create db field tables and bind values to them.
+   * @param init_params : Map<string:key, mixed:value>
+   * @return void
    */
-  protected abstract function loadChildDbFieldTable();
+  private function initDbFieldTables($init_params) {
+    // Fail because 'parentDbFieldTable' or 'childDbFieldTable' already exists
+    assert(!isset($this->parentDbFieldTable) && !isset($this->childDbFieldTable));
+
+    // Initialize parent db field table
+    $this->parentDbFieldTable = self::genParentDbFieldTableTemplate();
+    $this->bindValuesToDbTable($init_params, $this->parentDbFieldTable);
+
+    // Initialize child db field table
+    $this->childDbFieldTable = static::genChildDbFieldTable($init_params);
+  }
 
   /**
    * validateOrThrow()
@@ -683,8 +671,6 @@ abstract class SqlRecord extends AccessLayerObject {
       self::$deleteRecordPreparedStatementCache = array();
     }
     
-    $called_class_name = get_called_class();
-
     // Initiate implicit tx, if nonextant explicit tx 
     $is_implicit_tx = false;
     if (self::$numTransactions == 0) {
@@ -694,27 +680,30 @@ abstract class SqlRecord extends AccessLayerObject {
 
     // Fail due to invalid database connection
     assert(isset(self::$databaseHandle));
+
+    // Delete this record and all child records 
+    $table_name = static::getFullyQualifiedTableName();
     
     try {
-      // Create delete recortd statement, if nonextant 
-      if (!isset(self::$deleteRecordPreparedStatementCache[$called_class_name])) {
-        $delete_query = "DELETE FROM " . $called_class_name  . " "
-            . $this->genPrimaryKeyWhereClause();
-        $delete_record_cache = self::$databaseHandle->prepare($delete_query);
-      }
+      // Fetch prepared statement from cache, if present. Otherwise, create it.
+      if (isset(self::$deleteRecordPreparedStatementCache[$table_name])) {
+        // Fetch delete query from cache
+        $delete_record_stmt = self::$deleteRecordPreparedStatementCache[$table_name];
+      } else {
+        $fully_qualified_table_name = static::getFullyQualifiedTableName();
+        $delete_query = "DELETE FROM {$fully_qualified_table_name} "
+          . $this->genPrimaryKeyWhereClause();
 
-      $delete_record_stmt = self::$deleteRecordPreparedStatementCache[$called_class_name];
+        $delete_record_stmt = self::$databaseHandle->prepare($delete_query);
+        self::$deleteRecordPreparedStatementCache[$table_name] = $delete_record_stmt;
+      }
       
       // Delete children, schedule assets for deletion
       $this->deleteChildren();
       self::$assetDeletors = array_merge(self::$assetDeletors, $this->getAssets());
 
-      // Bind 'id'
-      $delete_record_stmt->bindValue(
-          self::transformForPreparedStatement(self::ID_KEY),
-          $this->id,
-          PDO::PARAM_INT
-      );
+      // Bind record's 'id' to delete-query
+      $this->bindId($delete_record_stmt);
 
       // Remove record
       $delete_record_stmt->execute();
@@ -728,18 +717,19 @@ abstract class SqlRecord extends AccessLayerObject {
       self::endTx();
     }
 
-    // Indicate deletion of this instance
+    // Indicate object's deletion
     $this->hasBeenDeleted = true;
   }
 
   /**
    * deleteAssets()
    * - Remove assets from file system.
+   * - Should be called after committing a record deletion
+   *    in order to avoid asset deletion getting stuck downstream
+   *    of the db.
+   * @return void
    */
   private static function deleteAssets() {
-    // Fail due to double delete
-    assert(!$this->hasBeenDeleted);
-
     // Fail due to invalid asset deletors 
     assert(isset(self::$assetDeletors));
 
@@ -759,51 +749,48 @@ abstract class SqlRecord extends AccessLayerObject {
   public function save() {
     // Fail due to attempting to save deleted record 
     assert(!$this->hasBeenDeleted);
-
+    
     // Fail if fields are invalid
     $this->validateOrThrow();
-
-    // Get db fields for this object
-    $record_fields = $this->getParentDbFields();
 
     // Initialize save record cache, if necessary
     if (!isset(self::$saveRecordPreparedStatementCache)) {
       self::$saveRecordPreparedStatementCache = array();
     }
 
-    $called_class_name = get_called_class();
-    
+    // Initiate implicit transaction, if needed
     $is_implicit_tx = false;
+    if (self::$numTransactions == 0) {
+      $is_implicit_tx = true; 
+      self::beginTx();
+    }
+   
+    // Fail due to invalid database connection
+    assert(isset(self::$databaseHandle));
+
+    $table_name = static::getTableName();
 
     try {
       // Create save-record prepared statement if non-existant
-      if (!isset(self::$saveRecordPreparedStatement[$called_class_name])) {
-        // Create query string
-        $save_query_str = self::genSaveRecordQuery($record_fields);
-        self::$saveRecordPreparedStatement[$called_class_name] = 
+      if (!isset(self::$saveRecordPreparedStatementCache[$table_name])) {
+        $save_query_str = self::genSaveRecordQuery($this->childDbFieldTable);
+        self::$saveRecordPreparedStatementCache[$table_name] = 
             self::$databaseHandle->prepare($save_query_str);
       }
 
-      $save_record_stmt = self::$saveRecordPreparedStatementCache[$called_class_name];
+      $save_record_stmt = self::$saveRecordPreparedStatementCache[$table_name];
 
       // Bind record fields 
-      foreach ($record_fields as $field) {
+      foreach ($this->childDbFieldTable as $field_name => $field) {
         $save_record_stmt->bindValue(
-            self::transformForPreparedStatement($field->getKeyName()),
+            self::transformForPreparedStatement($field_name),
             $field->getValue(),
-            $field->getType()
+            $field->getDataType()
         );
       }
-      
-      // Initiate implicit transaction, if needed
-      if (self::$numTransactions == 0) {
-        $is_implicit_tx = true; 
-        self::beginTx();
-      }
 
-      // Fail due to invalid database connection
-      assert(isset(self::$databaseHandle));
-
+      // Bind 'id' to save query
+      $this->bindId($save_record_stmt);
       // Save record fields
       $save_record_stmt->execute();
     } catch (PDOException $e) {
@@ -823,11 +810,17 @@ abstract class SqlRecord extends AccessLayerObject {
    * @return string : query
    */
   private static function genSaveRecordQuery($record_fields) {
-		$save_query = "UPDATE " . get_called_class() . " SET ";
-		foreach ($record_fields as $field) {
-			$save_query .= $field->getKeyName() . "=" . self::transformForPreparedStatement($field->getKeyName()) . ", ";
+    // Build query header
+    $fully_qualified_table_name = static::getFullyQualifiedTableName();
+    $save_query = "UPDATE {$fully_qualified_table_name} SET ";
+
+    // Specify fields to be updated
+    foreach ($record_fields as $field_name => $field) {
+      $transformed_field_name = self::transformForPreparedStatement($field_name);
+      $save_query .= "{$field_name}={$transformed_field_name}, ";
 		}
-    
+
+    // Append 'where clause' in order to pinpoint the record to update 
     return substr($save_query, 0, strlen($save_query) - 2)
         . " " . static::genPrimaryKeyWhereClause(); 
   }
@@ -835,10 +828,65 @@ abstract class SqlRecord extends AccessLayerObject {
   /**
    * genPrimaryKeyWhereClause()
    * - Create "where clause" sql string with unique keys for this object.
+   * - Used to identify a specific record in the db by its primary key.
    * @return string : query 'where' clause
    */
   private static function genPrimaryKeyWhereClause() {
     return "WHERE " . self::ID_KEY . "=" . self::transformForPreparedStatement(self::ID_KEY);
+  }
+
+  /**
+   * getTableName()
+   * - Fetch name of table.
+   * @return string : name of table
+   */
+  private static function getTableName() {
+    return get_called_class();
+  }
+
+  /**
+   * getDatabaseName()
+   * - Fetch name of database.
+   * @return string : name of database 
+   */
+  private static function getDatabaseName() {
+    return get_parent_class(static::getTableName());
+  }
+
+  /**
+   * genFullyQualifiedTableName() 
+   * - Compose fully qualified table name.
+   * @param database_name : string of database name
+   * @param table_name : string of table name
+   * @return string : fully qualified table name 
+   */
+  private static function genFullyQualifiedTableName($database_name, $table_name) {
+    return "{$database_name}.{$table_name}";
+  }
+
+  /**
+   * getFullyQualifiedTableName()
+   * - Return fully qualified table name of table.
+   * @return string : fully qualified table name 
+   */
+  private static function getFullyQualifiedTableName() {
+    $database_name = static::getDatabaseName();
+    $table_name = static::getTableName();
+    return static::genFullyQualifiedTableName($database_name, $table_name);
+  }
+
+  /**
+   * bindId()
+   * - Bind 'id' to this prepared statement.
+   * @param prepared_stmt : prepared statement to which 'id' will be bound
+   * @return void
+   */
+  private function bindId($prepared_stmt) {
+    $prepared_stmt->bindValue(
+        self::transformForPreparedStatement(self::ID_KEY),
+        $this->getId(),
+        DataTypeName::UNSIGNED_INT 
+    ); 
   }
 
   /**
@@ -847,7 +895,13 @@ abstract class SqlRecord extends AccessLayerObject {
    * @return unsigned int : record id
    */
   public function getId() {
-    return $this->id;
+    // Fail due to double delete
+    assert(!$this->hasBeenDeleted);
+    
+    // Fail due to unset 'id' field
+    assert(isset($this->parentDbFieldTable[self::ID_KEY]));
+    
+    return $this->parentDbFieldTable[self::ID_KEY]->getValue();
   }
 
   /**
@@ -856,7 +910,13 @@ abstract class SqlRecord extends AccessLayerObject {
    * @return string : unix timestamp
    */
   public function getCreatedTime() {
-    return $this->createdTime;
+    // Fail due to double delete
+    assert(!$this->hasBeenDeleted);
+    
+    // Fail due to unset 'created-time' field
+    assert(isset($this->parentDbFieldTable[self::CREATED_KEY]));
+    
+    return $this->parentDbFieldTable[self::CREATED_KEY]->getValue();
   }
 
   /**
@@ -865,6 +925,12 @@ abstract class SqlRecord extends AccessLayerObject {
    * @return string : unix timestamp
    */
   public function getLastUpdatedTime() {
-    return $this->lastUpdatedTime;
+    // Fail due to double delete
+    assert(!$this->hasBeenDeleted);
+    
+    // Fail due to unset 'last-updated-time' field
+    assert(isset($this->parentDbFieldTable[self::LAST_UPDATED_TIME_KEY]));
+    
+    return $this->parentDbFieldTable[self::LAST_UPDATED_TIME_KEY]->getValue();
   }
 }

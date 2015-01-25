@@ -22,6 +22,8 @@ $foo_name_col = $foo_name_col_builder
 
 $foo_table->addColumn($foo_name_col);
 
+$foo_table->addUniqueKey($foo_name_col);
+
 $bar_table = new Table("bar");
 $test_db->addTable($bar_table);
 
