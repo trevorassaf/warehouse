@@ -16,12 +16,12 @@ function deleteAllFoo() {
 }
 
 function insertFoo() {
+  SqlRecord::beginTx(); 
   foo::insert(
     array(
       foo::NAME => "Kaiser Willhelm II",
     )
   );
-
   foo::insert(
     array(
       foo::NAME => "Tsar Nicholas II"
@@ -33,6 +33,7 @@ function insertFoo() {
       foo::NAME => "King George V"
     )
   );
+  SqlRecord::endTx();
 }
 
 function fetchAll() {
@@ -42,9 +43,7 @@ function fetchAll() {
 
 // -- MAIN
 function main() {
-  $russia_foo = foo::fetchByKey(foo::NAME, "Tsar Nicholas II");
-  $russia_foo->setName("Tsar Nicholas II");
-  $russia_foo->save();
+  insertFoo(); 
 }
 
 main();

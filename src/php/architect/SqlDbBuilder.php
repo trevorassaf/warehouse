@@ -2,6 +2,7 @@
 
 require_once(dirname(__FILE__)."/../access_layer/Import.php");
 require_once("DbBuilder.php");
+require_once("EnumTable.php");
 
 final class SqlDbBuilder implements DbBuilder {
 
@@ -21,7 +22,7 @@ final class SqlDbBuilder implements DbBuilder {
    */
   private static $DISALLOWED_COLUMN_NAMES = array(
       SqlRecord::ID_KEY,
-      SqlRecord::CREATED_KEY,
+        SqlRecord::CREATED_KEY,
       SqlRecord::LAST_UPDATED_TIME_KEY,
   );
 
@@ -404,5 +405,46 @@ final class SqlDbBuilder implements DbBuilder {
     return "{$database_name}.{$table_name}";
   }
 
-  private function genEnumQuery($enum) { return ''; }
+  /**
+   * genEnumQuery()
+   * - Compose query for creating an enum-table.
+   * @param database_name : string
+   * @param enum_table : EnumTable
+   * @return string : query
+   */
+  private function genEnumQuery($database_name, $enum_table) { 
+    $enum_table_query = $this->genCreateEnumTableQuery(
+        $database_name,
+        $enum_table->getName(),
+        $enum_table->getElementMaxLength()
+    );
+    $insert_value_queries = $this->genEnumInsertValueQueries($database_name, $enum_table);
+
+    return "{$enum_table_query}\n\n{$insert_value_queries}"; 
+  }
+
+  /**
+   * genCreateEnumTableQuery()
+   * - Generate query for creating an enum-table.
+   * @param database_name : string
+   * @param enum_table_name : string
+   * @param max_value_length : unsigned int
+   * @return string : query for creating enum table
+   */
+  private function genCreateEnumTableQuery($database_name, $enum_table_name, $max_value_length) {
+    $table_header = $this->genCreateTableQueryHeader($database_name, $enum_table_name);
+    $enum_field_name = EnumTable::FIELD_NAME;
+    $enum_col_definition = "\t{$enum_field_name} VARCHAR({$max_value_length}) NOT NULL, \n\tUNIQUE KEY(value));";
+    return $table_header . $enum_col_definition;
+  }
+
+  private function genEnumInsertValueQueries($db_name, $enum_table) {
+    $insert_queries = '';
+    $enum_field_name = EnumTable::FIELD_NAME;
+    $fully_qualified_table_name = $this->genFullyQualifiedTableName($db_name, $enum_table->getName());
+    foreach ($enum_table->getElementSet() as $element) {
+      $insert_queries .= "INSERT INTO {$fully_qualified_table_name} ({$enum_field_name}) VALUES (\"{$element}\");\n";
+    }
+    return $insert_queries;
+  } 
 }

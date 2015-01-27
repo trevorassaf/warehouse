@@ -20,3 +20,16 @@ CREATE TABLE test_db.bar_foo_join_table(
         FOREIGN KEY(foo_id) REFERENCES test_db.foo(id),
         FOREIGN KEY(bar_id) REFERENCES test_db.bar(id));
 
+CREATE TABLE test_db.baz(
+	id SERIAL,
+	PRIMARY KEY(id),
+	created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+	value VARCHAR(1) NOT NULL, 
+	UNIQUE KEY(value));
+
+INSERT INTO test_db.baz (value) VALUES ("a");
+INSERT INTO test_db.baz (value) VALUES ("b");
+INSERT INTO test_db.baz (value) VALUES ("c");
+
+

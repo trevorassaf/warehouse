@@ -35,7 +35,7 @@ class bar extends test_db {
 
 }
 
-class bar_foo_join_table extends SqlRecord {
+class bar_foo_join_table extends test_db {
 
 	const FOO_ID = 'foo_id';
 	const BAR_ID = 'bar_id';
@@ -56,6 +56,24 @@ class bar_foo_join_table extends SqlRecord {
 	public function setFooId($foo_id) { $this->childDbFieldTable[self::FOO_ID]->setValue($foo_id); }
 
 	public function setBarId($bar_id) { $this->childDbFieldTable[self::BAR_ID]->setValue($bar_id); }
+
+}
+
+class baz extends test_db {
+
+	const VALUE = 'value';
+
+	protected static $keys = array(
+		array(self::VALUE),
+	);
+
+	protected static function genChildDbFieldTableTemplate() {
+		return array(
+			self::VALUE => new AccessLayerField(DataTypeName::STRING),
+		);
+	}
+
+	public function getValue() { return $this->childDbFieldTable[self::VALUE]->getValue(); }
 
 }
 

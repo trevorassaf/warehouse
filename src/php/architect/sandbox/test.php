@@ -29,4 +29,11 @@ $test_db->addTable($bar_table);
 
 $test_db->addTableMapping($foo_table, $bar_table, TableMappingType::MANY_TO_MANY);
 
+$baz_enum = new EnumTable("baz");
+$baz_enum->addElement("a");
+$baz_enum->addElement("b");
+$baz_enum->addElement("c");
+
+$test_db->addEnum($baz_enum);
+
 $arch->create($test_db, "./");

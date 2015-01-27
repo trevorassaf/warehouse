@@ -36,6 +36,16 @@ class Table {
   }
 
   /**
+   * setColumns()
+   * - Set columns for table.
+   * @param Set<Column>
+   * @return void
+   */
+  public function setColumns($column_set) {
+    $this->columnSet = $column_set; 
+  }
+
+  /**
    * addColumns()
    * - Add set of columns to table.
    * @param column_list : array<Column>
@@ -67,20 +77,33 @@ class Table {
   /**
    * addCompositeKey()
    * - Make composite key from provided column name set
-   * @param column_name_set : Set<string:column-name>
+   * @param column_set : Set<Column:column>
    * @return void
    */
-  public function addCompositeKey($column_name_set) {
-    $this->uniqueColumnSetList[] = $column_name_set;
+  public function addCompositeKey($column_set) {
+    $this->uniqueColumnSetList[] = $column_set;
   }
 
   /**
    * addUniqueKey()
    * - Make unique key from provided column name. 
-   * @param column_name : Set<string:column-name>
+   * @param column : Column:column 
    * @return void
    */
-  public function addUniqueKey($column_name) {
-    $this->uniqueColumnSetList[] = array($column_name);
+  public function addUniqueKey($column) {
+    $this->uniqueColumnSetList[] = array($column);
+  }
+
+  /**
+   * setCompositeKeyList()
+   * - Establish column name set list.
+   * @param column_set_list : Array<Array<Column>>
+   * @return void
+   */
+  public function setCompositeKeyList($column_set_list) {
+    $this->uniqueColumnSetList = array();
+    foreach ($column_set_list as $column_set) {
+      $this->addCompositeKey($column_set);
+    }
   }
 }

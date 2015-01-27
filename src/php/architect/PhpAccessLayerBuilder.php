@@ -2,8 +2,10 @@
 
 require_once(dirname(__FILE__)."/AccessLayerBuilder.php");
 require_once(dirname(__FILE__)."/SqlDbBuilder.php");
+require_once("PhpEnumClassBuilder.php");
+require_once("EnumTable.php");
 
-final class PhpClassBuilder {
+class PhpClassBuilder {
 
   const COLUMN_NAME_DELIMITER = '_';
 
@@ -122,20 +124,42 @@ final class PhpClassBuilder {
     $upper_camel_case_secondary_table_name = $this->genUpperCamelCase($secondary_table_name);
     $secondary_key_name = $this->genConstantName($this->genForeignKeyField($secondary_table_name)); 
 
-     
+   // TODO finish this 
   }
 
+  // TODO finish this
   private function appendManyToManySetter($primary_table_name, $secondary_table_name, $foreign_key_col_name) {}
 
+  /**
+   * genForeignKeyField()
+   * - Compose name of foreign key field.
+   * @param table_name : string
+   * @return string : foreign key name
+   */  
   private function genForeignKeyField($table_name) {
     return strtolower($table_name) . "_id";
   }
 
-  private function appendDbKey($db_key_name) {
+  /**
+   * appendDbKey()
+   * - Generate db key and append it to the cached sequence of access
+   *    layer fields.
+   * @param db_key_name : string
+   * @return void
+   */
+  protected function appendDbKey($db_key_name) {
     $this->dbKeys .= "\tconst {$this->genConstantName($db_key_name)} = '{$db_key_name}';\n";
   }
 
-  private function appendAccessLayerFields($db_key_name, $data_type) {
+  /**
+   * appendAccessLayerFields()
+   * - Generate access layer field delcaration and append it to
+   *    the cached sequence of access layer fields.
+   * @param db_key_name : string
+   * @param data_type : DataType
+   * @return void
+   */
+  protected function appendAccessLayerFields($db_key_name, $data_type) {
     $data_type_str = "DataTypeName::";
     switch ($data_type->getName()) {
       case DataTypeName::INT:
@@ -163,11 +187,25 @@ final class PhpClassBuilder {
     $this->accessLayerFields .= "\t\t\tself::{$this->genConstantName($db_key_name)} => new AccessLayerField({$data_type_str}),\n"; 
   }
 
-  private function appendGetter($db_key_name) {
+  /**
+   * appendGetter()
+   * - Generate getter of field and append to cached sequence of
+   *    getters.
+   * @param db_key_name : string
+   * @return void
+   */
+  protected function appendGetter($db_key_name) {
     $getter_str = "\tpublic function get{$this->genUpperCamelCase($db_key_name)}() { return \$this->childDbFieldTable[self::{$this->genConstantName($db_key_name)}]->getValue(); }";
     $this->getters .= "\n".$getter_str . "\n";
   }
 
+  /**
+   * appendSetter()
+   * - Generate setter from field name and append to cached sequence
+   *    of setters.
+   * @param db_key_name : string
+   * @return void    
+   */
   private function appendSetter($db_key_name) {
     $setter_str = "\tpublic function set{$this->genUpperCamelCase($db_key_name)}(\${$db_key_name}) { \$this->childDbFieldTable[self::{$this->genConstantName($db_key_name)}]->setValue(\${$db_key_name}); }";
     $this->setters .= "\n".$setter_str . "\n";
@@ -176,6 +214,7 @@ final class PhpClassBuilder {
   /**
    * genDefaultUniqueKeys()
    * - Generate default unique keys statement.
+   * @return string : unique key declaration
    */
   private function genDefaultUniqueKeys() {
     return "\tprotected static \$keys = array();";
@@ -222,10 +261,23 @@ final class PhpClassBuilder {
     $this->uniqueKeys .= "\n\t);";
   }
 
+  /**
+   * genClassDefinition()
+   * - Generate php definition of class.
+   * @param table_class_name : string
+   * @param parent_class_name : string
+   * @param class_content : string
+   * @return string : php class defintion
+   */
   private function genClassDefinition($table_class_name, $parent_class_name, $class_content) {
     return "class {$table_class_name} extends {$parent_class_name} {\n\n$class_content\n}"; 
   }
 
+  /**
+   * build()
+   * - Compose php access layer definition string.
+   * @return string : php access layer definition
+   */
   public function build() {
     $class_content = '';
 
@@ -252,10 +304,16 @@ final class PhpClassBuilder {
     if (!empty($this->setters)) {
       $class_content .= $this->setters;
     }
-    
+
     return $this->genClassDefinition($this->tableClassName, $this->parentClassName, $class_content);
   }
 
+  /**
+   * genAccessLayerFunctionDef()
+   * - Compose access layer child table template function.
+   * @param access_layer_field_str : string
+   * @return string : genChildDbFieldTableTemplate() function definition
+   */
   private function genAccessLayerFunctionDef($access_layer_field_str) {
     $function_prefix = "\tprotected static function genChildDbFieldTableTemplate() {\n\t\treturn array(";
     return $function_prefix . (empty($access_layer_field_str)
@@ -263,10 +321,22 @@ final class PhpClassBuilder {
       : "\n{$access_layer_field_str}\t\t);\n\t}");
   }
 
+  /**
+   * genConstantName()
+   * - Compose constant name.
+   * @param db_key_name : string
+   * @return string : const name
+   */
   private function genConstantName($db_key_name) {
     return strtoupper($db_key_name);
   }
 
+  /**
+   * genLowerCamelCase()
+   * - Generate lower camel case of string.
+   * @param db_key_name : string
+   * @return string : lower camel case version of string
+   */
   private function genLowerCamelCase($db_key_name) {
     $token_list = explode(self::COLUMN_NAME_DELIMITER, $db_key_name); 
     for ($i = 1; $i < count($token_list); ++$i) {
@@ -275,6 +345,12 @@ final class PhpClassBuilder {
     return implode($token_list);
   }
 
+  /**
+   * genUpperCamelCase()
+   * - Return upper-camelcase version of input.
+   * @param db_key_name : string
+   * @return string : upper-camelcase version of input
+   */
   private function genUpperCamelCase($db_key_name) {
     return ucfirst($this->genLowerCamelCase($db_key_name));
   }
@@ -346,6 +422,7 @@ final class PhpAccessLayerBuilder implements AccessLayerBuilder {
     foreach ($database->getTableMappings() as $mapping) {
       if ($mapping->getTableMappingType() == TableMappingType::MANY_TO_MANY) {
         $php_class_builder_list[] = $this->genJoinTableClassBuilder(
+            $database->getName(),
             $mapping->getPrimaryTable(),
             $mapping->getSecondaryTable()
         );
@@ -354,7 +431,9 @@ final class PhpAccessLayerBuilder implements AccessLayerBuilder {
 
     // Create enum-table builders
     foreach ($database->getEnums() as $enum) {
-// TODO : build this shit    
+      $enum_class_builder = new PhpEnumClassBuilder($enum, $database->getName());
+      $enum_class_builder->setUniqueKeySetList($enum->getUniqueColumnSetList());
+      $php_class_builder_list[] = $enum_class_builder;
     }
 
     // Create class definition strings
@@ -366,11 +445,19 @@ final class PhpAccessLayerBuilder implements AccessLayerBuilder {
     return $class_definitions;
   }
 
-  private function genJoinTableClassBuilder($table_a, $table_b) {
+  /**
+   * genJoinTableClassBuilder()
+   * - Compose join table class builder.
+   * @param database_name : string
+   * @param table_a : Table
+   * @param table_b : Table
+   * @return PhpEnumClassBuilder : php enum class builder
+   */
+  private function genJoinTableClassBuilder($database_name, $table_a, $table_b) {
     $join_table_name = SqlDbBuilder::genJoinTableName(
         $table_a->getName(), $table_b->getName()
     );
-    $class_builder = new PhpClassBuilder($join_table_name, self::DB_SUPER_CLASS_NAME);
+    $class_builder = new PhpClassBuilder($join_table_name, $database_name);
     
     // Add join column pair
     $table_a_field_name = SqlDbBuilder::genForeignKeyColumnName($table_a->getName());
