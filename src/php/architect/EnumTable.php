@@ -2,94 +2,57 @@
 
 require_once("Table.php");
 
+/**
+ * This class extends the functionality of a regular Table by supporting
+ * default values (the 'enum' elements). 
+ */
 final class EnumTable extends Table {
 
-  /**
-   * Name for enum field.
-   */
-  const FIELD_NAME = "value";
-
-  private
-    $elementSet,
-    $elementMaxLength;
+  private $elementList;
 
   /**
    * __construct()
-   * - Ctor for EnumTable.
-   * @param name : name of enum table
+   * - Ctor for EnumTable. 
+   *  @param name : name of enum table
    */
   public function __construct($name) {
     parent::__construct($name);
-    $this->elementSet = array();
-    $this->elementMaxLength = 0;
-
-    // Init enum column
-    $this->configureEnumColumn();
-  }
-
-  /**
-   * getElementMaxLength()
-   * - Return string-size of longest element.
-   * @return unsigned int : length of longest element
-   */
-  public function getElementMaxLength() {
-    return $this->elementMaxLength;
+    $this->elementList = array();
   }
 
   /**
    * addElement()
-   * - Add element to set.
-   * @param element : mixed
+   * - Add element to list.
+   * @param element : Map<string:key, mixed:value> 
    * @return void
    */
-  public function addElement($element) {
-    $this->elementSet[] = $element; 
-
-    // Update 'elementMaxLength' if necessary
-    if (strlen($element) > $this->elementMaxLength) {
-      $this->elementMaxLength = strlen($element);
-
-      // Update enum columns
-      $this->configureEnumColumn();
-    }
+  public function addElement($element_map) {
+    $this->elementList[] = $element_map; 
   }
 
   /**
    * setElements()
-   * - Save element set.
-   * @param element_set : Set<mixed>
+   * - Save element list.
+   * @param element_set : List<Map<string:key, mixed:value>>
    * @return void
    */
-  public function setElements($element_set) {
-    foreach ($element_set as $e) {
+  public function setElements($element_list) {
+    // Fail because 'element_list' s null
+    assert(isset($element_list));
+
+    $this->elementList = array();
+
+    foreach ($element_list as $e) {
       $this->addElement($e);
     } 
   }
 
   /**
-   * configureEnumColumn()
-   * - Compose and set column for enum table.
-   * @return Column : column for this eum
-   */ 
-  private function configureEnumColumn() {
-    $column_builder = new ColumnBuilder();
-    $enum_col = $column_builder
-        ->setName(self::FIELD_NAME)
-        ->setDataType(DataType::string()) 
-        ->setFirstLength($this->elementMaxLength)
-        ->build();
-
-    // Set unique enum column 
-    parent::setColumns(array($enum_col));
-    parent::setCompositeKeyList(array(array($enum_col)));
-  }
-
-  /**
-   * getEementSet()
-   * - Return element set.
-   * @return Set<mixed>
+   * getElementList()
+   * - Return element list.
+   * @return List<Map<string:key, mixed:value>>
    */
-  public function getElementSet() {
-    return $this->elementSet;
+  public function getElements() {
+    return $this->elementList;
   }
 }

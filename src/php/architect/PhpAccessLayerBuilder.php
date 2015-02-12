@@ -26,6 +26,13 @@ class PhpClassBuilder {
     $tableClassName,
     $parentClassName;
 
+  /**
+   * __construct()
+   * - Ctor for PhpAccessLayerBuilder.
+   * - Initialize strings buffers for access layer.
+   * @param table_name : string
+   * @param parent_class_name : string
+   */
   public function __construct($table_name, $parent_class_name) {
     $this->tableClassName = $table_name;
     $this->parentClassName = $parent_class_name;
@@ -38,6 +45,11 @@ class PhpClassBuilder {
     $this->uniqueKeys = $this->genDefaultUniqueKeys();
   }
 
+  /**
+   * addField()
+   * - Contribute field to class.
+   * @param column : Column
+   */
   public function addField($column) {
     $column_name = $column->getName();
     $this->appendDbKey($column_name);
@@ -46,6 +58,10 @@ class PhpClassBuilder {
     $this->appendAccessLayerFields($column_name, $column->getDataType());
   }
 
+  /**
+   * addOneToOneMapping()
+   * - 
+   */
   public function addOneToOneMapping($primary_table_name, $secondary_table_name) {
     $foreign_key_col_name = $this->genForeignKeyField($secondary_table_name); 
     $this->appendDbKey($foreign_key_col_name);
@@ -431,7 +447,7 @@ final class PhpAccessLayerBuilder implements AccessLayerBuilder {
 
     // Create enum-table builders
     foreach ($database->getEnums() as $enum) {
-      $enum_class_builder = new PhpEnumClassBuilder($enum, $database->getName());
+      $enum_class_builder = new PhpEnumClassBuilder($enum->getName(), $database->getName());
       $enum_class_builder->setUniqueKeySetList($enum->getUniqueColumnSetList());
       $php_class_builder_list[] = $enum_class_builder;
     }

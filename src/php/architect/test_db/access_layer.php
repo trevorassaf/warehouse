@@ -61,19 +61,12 @@ class bar_foo_join_table extends test_db {
 
 class baz extends test_db {
 
-	const VALUE = 'value';
-
 	protected static $keys = array(
-		array(self::VALUE),
 	);
 
 	protected static function genChildDbFieldTableTemplate() {
-		return array(
-			self::VALUE => new AccessLayerField(DataTypeName::STRING),
-		);
+		return array();
 	}
-
-	public function getValue() { return $this->childDbFieldTable[self::VALUE]->getValue(); }
 
 }
 

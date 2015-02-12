@@ -40,7 +40,7 @@ final class SqlDbBuilder implements DbBuilder {
    */
   private static $SQL_DATA_TYPE_MAP = array(
       DataTypeName::INT => "INT",
-      DataTypeName::UNSIGNED_INT => "UNSIGNED INT",
+      DataTypeName::UNSIGNED_INT => "INT UNSIGNED",
       DataTypeName::SERIAL => "SERIAL",
       DataTypeName::BOOL => "BIT",
       DataTypeName::STRING => "VARCHAR",
@@ -108,11 +108,24 @@ final class SqlDbBuilder implements DbBuilder {
    */
   public function createDatabaseQuery($database) {
     $create_db_query = "CREATE DATABASE {$database->getName()};\n\n";
-    
     $create_tables_query = '';
+    
     foreach ($database->getTables() as $table) {
       // Fail due to previously set table
-      $create_tables_query .= $this->genCreateTableQuery($database->getName(), $table) . "\n\n";
+      $create_tables_query .= 
+          $this->genCreateTableQuery(
+              $database->getName(),
+              $table
+          ) . "\n\n";
+    }
+
+    $create_enums_query = '';
+    foreach ($database->getEnums() as $enum) {
+      $create_enums_query .= 
+          $this->genEnumQuery(
+              $database->getName(),
+              $enum
+          ) . "\n\n";
     }
 
     $create_foreign_key_queries = '';
@@ -120,16 +133,11 @@ final class SqlDbBuilder implements DbBuilder {
       $create_foreign_key_queries .= $this->genCreateForeignKeyQuery($database->getName(), $fk_mapping) . "\n\n"; 
     }
 
-    $create_enums_query = '';
-    foreach ($database->getEnums() as $enum) {
-      $create_enums_query .= $this->genEnumQuery($database->getName(), $enum) . "\n\n";
-    }
-
     return
       $create_db_query .
       $create_tables_query .
-      $create_foreign_key_queries .
-      $create_enums_query;
+      $create_enums_query .
+      $create_foreign_key_queries;
   }
 
   /**
@@ -410,40 +418,61 @@ final class SqlDbBuilder implements DbBuilder {
    * - Compose query for creating an enum-table.
    * @param database_name : string
    * @param enum_table : EnumTable
-   * @return string : query
+   * @return string : query to create enum table
    */
   private function genEnumQuery($database_name, $enum_table) { 
-    $enum_table_query = $this->genCreateEnumTableQuery(
-        $database_name,
-        $enum_table->getName(),
-        $enum_table->getElementMaxLength()
-    );
-    $insert_value_queries = $this->genEnumInsertValueQueries($database_name, $enum_table);
+    // Assemple query for creating enum table
+    $enum_table_query = 
+        $this->genCreateTableQuery(
+            $database_name,
+            $enum_table
+        );
 
+    // Assemble queries for inserting enum values
+    $insert_value_queries = 
+        $this->genEnumInsertValueQueries(
+            $database_name, 
+            $enum_table
+        );
+    
     return "{$enum_table_query}\n\n{$insert_value_queries}"; 
-  }
-
-  /**
-   * genCreateEnumTableQuery()
-   * - Generate query for creating an enum-table.
-   * @param database_name : string
-   * @param enum_table_name : string
-   * @param max_value_length : unsigned int
-   * @return string : query for creating enum table
-   */
-  private function genCreateEnumTableQuery($database_name, $enum_table_name, $max_value_length) {
-    $table_header = $this->genCreateTableQueryHeader($database_name, $enum_table_name);
-    $enum_field_name = EnumTable::FIELD_NAME;
-    $enum_col_definition = "\t{$enum_field_name} VARCHAR({$max_value_length}) NOT NULL, \n\tUNIQUE KEY(value));";
-    return $table_header . $enum_col_definition;
   }
 
   private function genEnumInsertValueQueries($db_name, $enum_table) {
     $insert_queries = '';
-    $enum_field_name = EnumTable::FIELD_NAME;
-    $fully_qualified_table_name = $this->genFullyQualifiedTableName($db_name, $enum_table->getName());
-    foreach ($enum_table->getElementSet() as $element) {
-      $insert_queries .= "INSERT INTO {$fully_qualified_table_name} ({$enum_field_name}) VALUES (\"{$element}\");\n";
+    
+    $fully_qualified_table_name = 
+        $this->genFullyQualifiedTableName(
+            $db_name,
+            $enum_table->getName()
+        );
+    
+    $enum_col_map = $enum_table->getColumns();
+
+    foreach ($enum_table->getElements() as $element) {
+      $query_key_list = '';
+      $query_elements = '';
+      
+      foreach ($element as $key => $value) {
+        // Skip because we have nothing to insert
+        if (!isset($value)) {
+          continue; 
+        }         
+
+        $enum_col = $enum_col_map[$key];
+        $value_str = ($enum_col->getDataType == DataType::string()) 
+            ? "\"{$value}\""
+            : "{$value}";
+        $query_value_list .= "{$value_str}, ";
+        
+        $query_key_list .= "{$key}, ";
+      }
+
+      // Include surrounding parens
+      $query_key_list = substr($query_key_list, 0, -2);
+      $query_value_list = substr($query_value_list, 0, -2);
+
+      $insert_queries .= "INSERT INTO {$fully_qualified_table_name} ({$query_key_list}) VALUES ({$query_value_list});\n";
     }
     return $insert_queries;
   } 

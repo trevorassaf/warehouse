@@ -30,9 +30,18 @@ $test_db->addTable($bar_table);
 $test_db->addTableMapping($foo_table, $bar_table, TableMappingType::MANY_TO_MANY);
 
 $baz_enum = new EnumTable("baz");
-$baz_enum->addElement("a");
-$baz_enum->addElement("b");
-$baz_enum->addElement("c");
+$baz_col_builder = new ColumnBuilder();
+$baz_value_col = $baz_col_builder
+    ->setName("value") 
+    ->setDataType(DataType::string())
+    ->setFirstLength(1)
+    ->build();
+
+$baz_enum->addColumn($baz_value_col);
+
+$baz_enum->addElement(array("value" => "a"));
+$baz_enum->addElement(array("value" => "b"));
+$baz_enum->addElement(array("value" => "c"));
 
 $test_db->addEnum($baz_enum);
 

@@ -8,7 +8,8 @@ class ColumnBuilder {
     $firstLength,
     $secondLength,
     $allowsNull,
-    $isReadOnly;
+    $isReadOnly,
+    $foreignKeyTable;
 
   /**
    * __construct()
@@ -21,6 +22,7 @@ class ColumnBuilder {
     $this->secondLength = null;
     $this->allowsNull = false;
     $this->isReadOnly = false;
+    $this->foreignKeyTable = null;
   }
 
   /**
@@ -81,11 +83,22 @@ class ColumnBuilder {
   /**
    * setIsReadOnly()
    * - Indicate if column is read only 
-   * @param is_read_only : string 
+   * @param is_read_only : bool
    * @return this
    */
   public function setIsReadOnly($is_read_only) {
     $this->isReadOnly = $is_read_only;
+    return $this;
+  }
+
+  /**
+   * setForeignKey()
+   * - Specify foreign key for column. 
+   * @param foreign_key_table : Table 
+   * @return this
+   */
+  public function setForeignKey($foreign_key_table) {
+    $this->foreignKeyTable = $foreign_key_table;
     return $this;
   }
 
@@ -123,7 +136,8 @@ class ColumnBuilder {
       $this->firstLength,
       $this->secondLength,
       $this->allowsNull,
-      $this->isReadOnly
+      $this->isReadOnly,
+      $this->foreignKeyTable
     );
   }
 }
@@ -136,7 +150,8 @@ class Column {
     $firstLength,
     $secondLength,
     $allowsNull,
-    $isReadOnly;
+    $isReadOnly,
+    $foreignKeyTable;
 
   public function __construct(
     $name,
@@ -144,7 +159,8 @@ class Column {
     $first_length,
     $second_length,
     $allows_null,
-    $is_read_only
+    $is_read_only,
+    $foreign_key_table
   ) {
     $this->name = $name;
     $this->dataType = $data_type;
@@ -152,6 +168,7 @@ class Column {
     $this->secondLength = $second_length;
     $this->allowsNull = $allows_null;
     $this->isReadOnly = $is_foreign_key;
+    $this->foreignKeyTable = $foreign_key_table;
   }
 
   /**
@@ -224,5 +241,14 @@ class Column {
    */
   public function isReadOnly() {
     return $this->isReadOnly;
+  }
+
+  /**
+   * getForeignKeyTable()
+   * - Return referenced table.
+   * @return Table : referenced table
+   */
+  public function getForeignKeyTable() {
+    return $this->foreignKeyTable;
   }
 }

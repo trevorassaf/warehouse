@@ -5,7 +5,7 @@ class Table {
   private
     $name,
     $uniqueColumnSetList,
-    $columnSet;
+    $columnMap;
 
   /**
    * __construct()
@@ -14,7 +14,7 @@ class Table {
   public function __construct($name) {
     $this->name = $name;
     $this->uniqueColumnSetList = array();
-    $this->columnSet = array();
+    $this->columnMap = array();
   }
 
   /**
@@ -32,29 +32,25 @@ class Table {
    * @param column : Column
    */
   public function addColumn($column) {
-    $this->columnSet[] = $column;
+    // Fail due to duplicate column entry
+    assert(!isset($this->columnMap[$column->getName()]));
+
+    $this->columnMap[$column->getName()] = $column;
   }
 
   /**
    * setColumns()
    * - Set columns for table.
-   * @param Set<Column>
+   * @param Map<string:key, Column:value>
    * @return void
    */
-  public function setColumns($column_set) {
-    $this->columnSet = $column_set; 
-  }
+  public function setColumns($column_map) {
+    $this->columnMap = array();
 
-  /**
-   * addColumns()
-   * - Add set of columns to table.
-   * @param column_list : array<Column>
-   */
-  public function addColumnSet($column_list) {
-    foreach ($column_list as $column) {
-      $this->addColumn($column);
+    foreach ($column_map as $key => $column) {
+      $this->addColumn($column); 
     }
-  } 
+  }
 
   /**
    * geColumnSet()
@@ -62,7 +58,16 @@ class Table {
    * @return Set<Column>
    */
   public function getColumns() {
-    return $this->columnSet;
+    return $this->columnMap;
+  }
+
+  /**
+   * getNumColumns()
+   * - Return size of column-set.
+   * @return unsigned int : number of cols
+   */
+  public function getNumColumns() {
+    return sizeof($this->columnSet);
   }
 
   /**
@@ -105,5 +110,22 @@ class Table {
     foreach ($column_set_list as $column_set) {
       $this->addCompositeKey($column_set);
     }
+  }
+
+  /**
+   * hasColumn()
+   * - Return true iff the table contains a column by the
+   *    specified name.
+   * @param name : string
+   * @return bool : true iff table contains specified column.
+   */
+  public function hasColumn($name) {
+    foreach ($this->columnSet as $key => $col) {
+      if ($key == $name) {
+        return true;
+      }
+    }
+
+    return false;
   }
 }
