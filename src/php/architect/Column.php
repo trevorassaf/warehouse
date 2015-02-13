@@ -9,7 +9,7 @@ class ColumnBuilder {
     $secondLength,
     $allowsNull,
     $isReadOnly,
-    $foreignKeyTable;
+    $referencedTableName;
 
   /**
    * __construct()
@@ -22,7 +22,7 @@ class ColumnBuilder {
     $this->secondLength = null;
     $this->allowsNull = false;
     $this->isReadOnly = false;
-    $this->foreignKeyTable = null;
+    $this->referencedTableName = null;
   }
 
   /**
@@ -92,13 +92,13 @@ class ColumnBuilder {
   }
 
   /**
-   * setForeignKey()
+   * setReferencedTableName()
    * - Specify foreign key for column. 
-   * @param foreign_key_table : Table 
+   * @param referenced_table_name : string 
    * @return this
    */
-  public function setForeignKey($foreign_key_table) {
-    $this->foreignKeyTable = $foreign_key_table;
+  public function setReferencedTableName($referenced_table_name) {
+    $this->referencedTableName = $referenced_table_name;
     return $this;
   }
 
@@ -113,23 +113,20 @@ class ColumnBuilder {
     // Fail due to unset datatype
     assert(isset($this->dataType));
     
-    // Fail due to invalid datatype
+    // Fail due to invalid datatype/length values
     if ($this->dataType->allowsFirstLength()) {
       if ($this->dataType->requiresFirstLength()) {
         assert(isset($this->firstLength));
       } 
-    } else {
-      assert(!isset($this->firstLength));
-    }
-
+    } 
+    
     if ($this->dataType->allowsSecondLength()) {
       if ($this->dataType->requiresSecondLength()) {
         assert(isset($this->secondLength));
       } 
-    } else {
-      assert(!isset($this->secondLength));
     }
 
+    // Produce column
     return new Column(
       $this->name,
       $this->dataType,
@@ -137,7 +134,7 @@ class ColumnBuilder {
       $this->secondLength,
       $this->allowsNull,
       $this->isReadOnly,
-      $this->foreignKeyTable
+      $this->referencedTableName
     );
   }
 }
@@ -151,8 +148,19 @@ class Column {
     $secondLength,
     $allowsNull,
     $isReadOnly,
-    $foreignKeyTable;
+    $referencedTableName;
 
+  /**
+   * __construct()
+   * - Ctor for Column.
+   * @param name : string
+   * @param data_type : DataType
+   * @param first_length : unsigned int
+   * @param second_length : unsigned int
+   * @param allows_null : bool
+   * @param is_read_only : bool
+   * @param referenced_table_name : string 
+   */
   public function __construct(
     $name,
     $data_type,
@@ -160,15 +168,15 @@ class Column {
     $second_length,
     $allows_null,
     $is_read_only,
-    $foreign_key_table
+    $referenced_table_name
   ) {
     $this->name = $name;
     $this->dataType = $data_type;
     $this->firstLength = $first_length;
     $this->secondLength = $second_length;
     $this->allowsNull = $allows_null;
-    $this->isReadOnly = $is_foreign_key;
-    $this->foreignKeyTable = $foreign_key_table;
+    $this->isReadOnly = $is_read_only;
+    $this->referencedTableName = $referenced_table_name;
   }
 
   /**
@@ -244,11 +252,20 @@ class Column {
   }
 
   /**
-   * getForeignKeyTable()
-   * - Return referenced table.
-   * @return Table : referenced table
+   * getReferencedTableName()
+   * - Return referenced table name.
+   * @return string : referenced table
    */
-  public function getForeignKeyTable() {
-    return $this->foreignKeyTable;
+  public function getReferencedTableName() {
+    return $this->referencedTableName;
+  }
+
+  /**
+   * isForeignKey()
+   * - Return true iff this column is a foreign key.
+   * @return bool : true iff column is foreign key
+   */
+  public function isForeignKey() {
+    return isset($this->referencedTableName);
   }
 }

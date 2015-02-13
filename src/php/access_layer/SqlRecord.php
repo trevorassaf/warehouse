@@ -50,7 +50,7 @@ abstract class SqlRecord extends AccessLayerObject {
   // Db Keys
   const ID_KEY = "id"; 
   const CREATED_KEY = "created"; 
-  const LAST_UPDATED_TIME_KEY = "last_updated";
+  const LAST_UPDATED_TIME_KEY = "lastUpdated";
 
   /**
    * List of keys for this table.

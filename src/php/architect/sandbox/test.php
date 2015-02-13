@@ -9,6 +9,49 @@ $arch = new Architect(
 
 $test_db = new Database("test_db");
 
+// Foo table
+$foo_table_builder = new TableBuilder();
+$foo_table_builder->setName("foo");
+
+$col_builder = new ColumnBuilder();
+
+$name_col = $col_builder
+  ->setName("name")
+  ->setDataType(DataType::string())
+  ->setFirstLength(10)
+  ->build();
+$age_col = $col_builder
+  ->setName("age")
+  ->setDataType(DataType::unsignedInt())
+  ->build();
+
+$foo_table_builder->bindColumn($name_col);
+$foo_table_builder->bindColumn($age_col);
+
+$foo_table_builder->addUniqueColumn($name_col);
+$foo_table_builder->addUniqueColumnSet(array($name_col, $age_col));
+
+$bar_table_builder = new TableBuilder();
+$bar_table_builder->setName("bar");
+
+TableBuilder::makeOneToMany($bar_table_builder, $foo_table_builder);
+
+$foo_table_builder->addRow(
+  array(
+    $name_col->getName() => "trevor",
+    $age_col->getName() => 21,
+  )
+);
+
+$foo = $foo_table_builder->build();
+$bar = $bar_table_builder->build();
+
+$test_db->addTable($foo);
+$test_db->addTable($bar);
+
+$arch->create($test_db, "./");
+
+/*
 $foo_table = new Table("foo");
 
 $test_db->addTable($foo_table);

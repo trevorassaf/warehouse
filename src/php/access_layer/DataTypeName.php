@@ -5,13 +5,13 @@ require_once(dirname(__FILE__)."/../util/Enum.php");
 final class DataTypeName extends Enum {
 
   // DataType names
-  const INT = 'INT';
-  const UNSIGNED_INT = 'INT UNSIGNED';
-  const SERIAL = 'SERIAL';
-  const BOOL = 'BIT'; 
-  const STRING = 'VARCHAR';
-  const TIMESTAMP = 'TIMESTAMP';
-  const FOREIGN_KEY = 'BIGINT UNSIGNED NOT NULL';
+  const INT = 0x00;
+  const UNSIGNED_INT = 0x01;
+  const SERIAL = 0x02;
+  const BOOL = 0x03; 
+  const STRING = 0x04;
+  const TIMESTAMP = 0x05;
+  const FOREIGN_KEY = 0x06;
 
   protected static $SUPPORTED_TYPES = array(
     self::INT,
@@ -19,5 +19,6 @@ final class DataTypeName extends Enum {
     self::BOOL,
     self::STRING,
     self::TIMESTAMP,
+    self::FOREIGN_KEY,
   );
 }

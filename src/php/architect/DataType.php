@@ -85,7 +85,7 @@ final class DataType {
   ) {
     // Fail if invalid enum type
     DataTypeName::validateType($dt_name);
-    DataTypeArgRequirement::validateType($dt_name);
+    DataTypeArgRequirement::validateType($arg_requirement);
 
     $this->name = $dt_name;
     $this->argRequirement = $arg_requirement;

@@ -8,7 +8,7 @@ require_once("Table.php");
  */
 final class EnumTable extends Table {
 
-  private $elementList;
+  private $rows;
 
   /**
    * __construct()
@@ -17,17 +17,49 @@ final class EnumTable extends Table {
    */
   public function __construct($name) {
     parent::__construct($name);
-    $this->elementList = array();
+    $this->rows = array();
   }
 
   /**
    * addElement()
-   * - Add element to list.
+   * - Add row to list.
    * @param element : Map<string:key, mixed:value> 
    * @return void
    */
-  public function addElement($element_map) {
-    $this->elementList[] = $element_map; 
+  public function addRow($field_map) {
+    $this->rows[] = $field_map; 
+  }
+
+  /**
+   * getElementIds()
+   * - Return element ids of rows that match the provided
+   *    field map.
+   * @param field_map : Map<string:key, mixed:value>
+   */
+  public function getElementIds($field_map) {
+    $field_map_size = sizeof($field_map);
+    $num_rows = sizeof($this->rows);
+    
+    $result_map = array();
+
+    for ($i = 0; $i < $num_rows; ++$i) {
+      $row = $this->rows[$i];
+      $is_match = true;
+
+      // Short-circuit if non-match
+      foreach ($field_map as $name => $value) {
+        if (!isset($row[$name]) || $row[$name] != $value) {
+          $is_match = false;
+        }
+      }
+
+      // Accumulate result
+      if ($is_match) {
+        $result_map[$i] = $row;
+      }
+    }
+
+    return $result_map;
   }
 
   /**
@@ -40,7 +72,7 @@ final class EnumTable extends Table {
     // Fail because 'element_list' s null
     assert(isset($element_list));
 
-    $this->elementList = array();
+    $this->rows = array();
 
     foreach ($element_list as $e) {
       $this->addElement($e);
@@ -53,6 +85,6 @@ final class EnumTable extends Table {
    * @return List<Map<string:key, mixed:value>>
    */
   public function getElements() {
-    return $this->elementList;
+    return $this->rows;
   }
 }
