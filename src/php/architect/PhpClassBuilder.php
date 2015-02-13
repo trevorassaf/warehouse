@@ -202,6 +202,9 @@ class PhpClassBuilder {
       case DataTypeName::TIMESTAMP:
         $data_type_str .= 'TIMESTAMP';
         break;
+      case DataTypeName::DATE:
+        $data_type_str .= 'DATE';
+        break;
       case DataTypeName::FOREIGN_KEY:
         $data_type_str .= 'FOREIGN_KEY';
         break;

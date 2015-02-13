@@ -31,6 +31,7 @@ final class DataType {
     $boolDataType = null,
     $stringDataType = null,
     $timestampDataType = null,
+    $dateDataType = null;
     $foreignKeyDataType = null;
 
   private
@@ -70,6 +71,13 @@ final class DataType {
       self::$timestampDataType = new self(DataTypeName::TIMESTAMP, DataTypeArgRequirement::NONE);
     }
     return self::$timestampDataType;
+  }
+
+  public function date() {
+    if (!isset(self::$dateDataType)) {
+      self::$dateDataType = new self(DataTypeName::DATE, DataTypeArgRequirement::NONE);
+    }
+    return self::$dateDataType;
   }
 
   public function foreignKey() {

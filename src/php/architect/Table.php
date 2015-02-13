@@ -259,10 +259,29 @@ class TableBuilder {
    * addRow()
    * - Insert row into table.
    * @param row : Map<string:key, mixed:value>
-   * @return this
+   * @return unsigned int : index of row 
+   */
+  public function addRowWithKeys($row) {
+    $this->rowList[] = $row; 
+    return $this;
+  }
+  
+  /**
+   * addElement()
+   * - Insert row with single field.
+   * @param value : value of field
+   * @param col_idx : index of column to bind 
+   * @return unsigned int : index of row
    */
   public function addRow($row) {
-    $this->rowList[] = $row; 
+    $row_with_keys = array();
+    
+    $row_size = sizeof($row);
+
+    assert(sizeof($this->rowList) == $row_size);
+    foreach ($this->columnMap as $col_name => $col) {
+      $row_with_keys[$col_name]
+    }
     return $this;
   }
 

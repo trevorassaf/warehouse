@@ -12,6 +12,7 @@ final class DataTypeName extends Enum {
   const STRING = 0x04;
   const TIMESTAMP = 0x05;
   const FOREIGN_KEY = 0x06;
+  const DATE = 0x07;
 
   protected static $SUPPORTED_TYPES = array(
     self::INT,
@@ -20,5 +21,6 @@ final class DataTypeName extends Enum {
     self::STRING,
     self::TIMESTAMP,
     self::FOREIGN_KEY,
+    self::DATE,
   );
 }

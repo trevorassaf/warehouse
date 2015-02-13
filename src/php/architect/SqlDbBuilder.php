@@ -31,7 +31,8 @@ final class SqlDbBuilder implements DbBuilder {
       DataTypeName::BOOL => "BIT",
       DataTypeName::STRING => "VARCHAR",
       DataTypeName::TIMESTAMP => "TIMESTAMP",
-      DataTypeName::FOREIGN_KEY => "BIGINT UNSIGNED"
+      DataTypeName::DATE => "DATE",
+      DataTypeName::FOREIGN_KEY => "BIGINT UNSIGNED",
   );
   
   /**
