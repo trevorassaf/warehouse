@@ -403,8 +403,7 @@ class TableBuilder {
   /**
    * addElement()
    * - Insert row with single field.
-   * @param value : value of field
-   * @param col_idx : index of column to bind 
+   * @param row : Map<string:key, mixed:value>
    * @return unsigned int : index of row
    */
   public function addRow($row) {
@@ -414,9 +413,29 @@ class TableBuilder {
     // Fail due to invalid un-keyed row size
     assert(sizeof($this->columnMap) == $row_size);
 
-    foreach ($this->columnMap as $col_name => $col) {
-      $row_with_keys[$col_name];
+    $col_key_set = array_keys($this->columnMap);
+
+    for ($i=0; $i < $row_size; ++$i) {
+      $row_with_keys[$col_key_set[$i]] = $row[$i];
     }
+
+    $this->addRowWithKeys($row_with_keys);
+
+    return $this;
+  }
+
+  /**
+   * addElement()
+   * - Add single value to table with single column
+   * @param element : value
+   * @return this
+   */
+  public function addElement($element) {
+    // Fail due bc number of columns must be 0
+    assert(sizeof($this->columnMap) == 1);
+
+    $this->addRow(array($element));
+
     return $this;
   }
 
