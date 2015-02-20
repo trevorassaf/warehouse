@@ -6,67 +6,73 @@ abstract class test_db extends SqlRecord {}
 
 class foo extends test_db {
 
-	const NAME = 'name';
+	const self::NAME = 'name';
+	const self::AGE = 'age';
 
 	protected static $keys = array(
 		array(self::NAME),
+		array(self::NAME, self::AGE),
 	);
 
 	protected static function genChildDbFieldTableTemplate() {
 		return array(
-			self::NAME => new AccessLayerField(DataTypeName::STRING),
+			self::self::NAME => new AccessLayerField(DataTypeName::STRING),
+			self::self::AGE => new AccessLayerField(DataTypeName::UNSIGNED_INT),
 		);
 	}
 
-	public function getName() { return $this->childDbFieldTable[self::NAME]->getValue(); }
+	public function getName() { return $this->childDbFieldTable[self::self::NAME]->getValue(); }
 
-	public function setName($name) { $this->childDbFieldTable[self::NAME]->setValue($name); }
+	public function getAge() { return $this->childDbFieldTable[self::self::AGE]->getValue(); }
+
+	public function setName($name) { $this->childDbFieldTable[self::self::NAME]->setValue($name); }
+
+	public function setAge($age) { $this->childDbFieldTable[self::self::AGE]->setValue($age); }
+
 
 }
 
 class bar extends test_db {
 
-	protected static $keys = array(
-	);
-
-	protected static function genChildDbFieldTableTemplate() {
-		return array();
-	}
-
-}
-
-class bar_foo_join_table extends test_db {
-
-	const FOO_ID = 'foo_id';
-	const BAR_ID = 'bar_id';
+	const self::NAME = 'name';
 
 	protected static $keys = array();
 
 	protected static function genChildDbFieldTableTemplate() {
 		return array(
-			self::FOO_ID => new AccessLayerField(DataTypeName::UNSIGNED_INT),
-			self::BAR_ID => new AccessLayerField(DataTypeName::UNSIGNED_INT),
+			self::self::NAME => new AccessLayerField(DataTypeName::STRING),
 		);
 	}
 
-	public function getFooId() { return $this->childDbFieldTable[self::FOO_ID]->getValue(); }
+	public function getName() { return $this->childDbFieldTable[self::self::NAME]->getValue(); }
 
-	public function getBarId() { return $this->childDbFieldTable[self::BAR_ID]->getValue(); }
+	public function setName($name) { $this->childDbFieldTable[self::self::NAME]->setValue($name); }
 
-	public function setFooId($foo_id) { $this->childDbFieldTable[self::FOO_ID]->setValue($foo_id); }
-
-	public function setBarId($bar_id) { $this->childDbFieldTable[self::BAR_ID]->setValue($bar_id); }
 
 }
 
-class baz extends test_db {
+class foo_bar_join_table extends test_db {
 
-	protected static $keys = array(
-	);
+	const self::BAR_ID = 'barId';
+	const self::FOO_ID = 'fooId';
+
+	protected static $keys = array();
 
 	protected static function genChildDbFieldTableTemplate() {
-		return array();
+		return array(
+			self::self::BAR_ID => new AccessLayerField(DataTypeName::FOREIGN_KEY),
+			self::self::FOO_ID => new AccessLayerField(DataTypeName::FOREIGN_KEY),
+		);
 	}
+
+	public function getBarId() { return $this->childDbFieldTable[self::self::BAR_ID]->getValue(); }
+
+	public function getFooId() { return $this->childDbFieldTable[self::self::FOO_ID]->getValue(); }
+
+	public function setBarId($barId) { $this->childDbFieldTable[self::self::BAR_ID]->setValue($barId); }
+
+	public function setFooId($fooId) { $this->childDbFieldTable[self::self::FOO_ID]->setValue($fooId); }
+
 
 }
 

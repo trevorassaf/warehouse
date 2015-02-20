@@ -194,7 +194,9 @@ final class SqlDbBuilder implements DbBuilder {
     if ($data_type->allowsSecondLength() && $column->hasSecondLength()) {
       $query .= ", " . $column->getSecondLength();
     }
-    if ($column->hasFirstLength() || $column->hasSecondLength()) {
+    if (($data_type->allowsFirstLength() || $data_type->allowsSecondLength()) 
+      && ($column->hasFirstLength() || $column->hasSecondLength())) 
+    {
       $query .= ')';
     }
     return $query;
@@ -241,10 +243,20 @@ final class SqlDbBuilder implements DbBuilder {
     $table
   ) {
     $fk_queries = '';
+    
+    $table_fqn = $this->genFullyQualifiedTableName(
+      $database_name,
+      $table->getName()
+    );
+
     foreach ($table->getColumns() as $name => $col) {
+      // Create fk query, if column is fk
       if ($col->isForeignKey()) {
-        $referenced_table_fqn = $this->genFullyQualifiedTableName($database_name, $table->getName());
-        $fk_queries .= "ALTER TABLE {$referenced_table_fqn}\n\t"
+        $referenced_table_fqn = $this->genFullyQualifiedTableName(
+          $database_name,
+          $col->getReferencedTableName()
+        );
+        $fk_queries .= "ALTER TABLE {$table_fqn}\n\t"
           . "ADD FOREIGN KEY({$col->getName()}) REFERENCES {$referenced_table_fqn}(" . SqlRecord::ID_KEY . ");\n"; 
       } 
     } 
@@ -285,6 +297,7 @@ final class SqlDbBuilder implements DbBuilder {
 
     foreach ($table->getRows() as $row) {
       $query_key_list = '';
+      $query_value_list = '';
       $query_elements = '';
       
       foreach ($row as $key => $value) {
@@ -298,7 +311,7 @@ final class SqlDbBuilder implements DbBuilder {
 
         // Accumulate field for insertion into row
         $table_col = $table_col_map[$key];
-        $value_str = ($table_col->getDataType == DataType::string()) 
+        $value_str = ($table_col->getDataType() == DataType::string()) 
             ? "\"{$value}\""
             : "{$value}";
         $query_value_list .= "{$value_str}, ";

@@ -25,7 +25,7 @@ class TableBuilder {
    * @param secondary_field_name: name of secondary field (optional)
    * @return void 
    */
-  public function makeOneToOne(
+  public static function makeOneToOne(
     $primary_table_builder,
     $secondary_table_builder,
     $primary_field_name=null,
@@ -82,7 +82,7 @@ class TableBuilder {
     // Incorporate new foreign key column
     $secondary_fk_col = self::genForeignKeyColumn(
         $secondary_field_name,
-        $primary_table_builder
+        $primary_table_builder->getName()
     );
 
     $secondary_table_builder->bindColumn($secondary_fk_col);
@@ -94,12 +94,16 @@ class TableBuilder {
    * @param table_a_builder: TableBuilder
    * @param table_b_builder: TableBuilder
    * @param join_table_name: name of table (optional)
+   * @param table_a_fk_name : string for table-a fk (optional)
+   * @param table_b_fk_name : string for table-b fk (optional)
    * @return TableBuilder : builder for join table 
    */
   public static function makeManyToMany(
     $table_a_builder,
     $table_b_builder,
-    $join_table_name=null
+    $join_table_name=null,
+    $table_a_fk_name=null,
+    $table_b_fk_name=null
   ) {
     // Create default table name, if necessary
     if ($join_table_name == null) {
@@ -114,20 +118,25 @@ class TableBuilder {
 
     $join_table_builder->setName($join_table_name);
 
-    // Create column names
-    $table_a_fk_col_name = self::genDefaultForeignKeyColumnName(
+    // Create column names, if unspecified by client
+    if ($table_a_fk_name == null) {
+      $table_a_fk_name = self::genDefaultForeignKeyColumnName(
         $table_a_builder->getName());
-    $table_b_fk_col_name = self::genDefaultForeignKeyColumnName(
+    }
+    
+    if ($table_b_fk_name == null) {
+      $table_b_fk_name = self::genDefaultForeignKeyColumnName(
         $table_b_builder->getName());
+    }
 
     // Create columns
     $table_a_fk_col = self::genForeignKeyColumn(
-        $table_a_fk_col_name,
-        $table_b_builder->getName()
+        $table_a_fk_name,
+        $table_a_builder->getName()
     );
     $table_b_fk_col = self::genForeignKeyColumn(
-        $table_b_fk_col_name,
-        $table_a_builder->getName()
+        $table_b_fk_name,
+        $table_b_builder->getName()
     );
 
     // Bind columns
@@ -135,6 +144,131 @@ class TableBuilder {
     $join_table_builder->bindColumn($table_b_fk_col);
 
     return $join_table_builder;
+  }
+
+  /**
+   * loadChildTable()
+   * - Insert rows into child table.
+   * @param parent_table : TableBuilder
+   * @param child_table : TableBuilder
+   * @param child_fk_col_name : string name for column in child table
+   * @param parent_row : Map<string:key, mixed:value>
+   * @param child_row_list : List<Map<string:key, mixed:value>>
+   * @return void
+   */
+  public static function loadChildTable(
+    $parent_table,
+    $child_table,
+    $child_fk_col_name,
+    $parent_row,
+    $child_row_list
+  ) {
+    // Fetch parent row id list
+    $parent_row_id_list = $parent_table->fetchColumnIdsOrInsert($parent_row);
+    
+    // Fail due to invalid one-to-many mapping. Child rows
+    // may refer to single parent row exclusively.
+    assert(sizeof($parent_row_id_list) == 1);
+
+    foreach ($child_row_list as $child_row) {
+      // Compose fk row
+      $fk_row = array_merge(
+        $child_row,
+        array(
+          $child_fk_col_name => $parent_row_id_list[0],
+        )
+      ); 
+
+      // Insert fk row
+      $child_table->addRowWithKeys($fk_row);
+    }
+  }
+
+  /**
+   * loadJoinTable()
+   * - Insert rows into join table based on rows in primary/secondary tables.
+   * @param primary_table : TableBuilder
+   * @param secondary_table : TableBuilder
+   * @param join_table : TableBuilder
+   * @param primary_row : Map<string:key, mixed:value>
+   * @param secondary_row_list : List<Map<string:key, mixed:value>>
+   * @param join_row : Map<string:key, mixed:value> (optional)
+   * @return void
+   */
+  public static function loadJoinTable(
+    $primary_table,
+    $secondary_table,
+    $join_table,
+    $primary_row_col_name,
+    $secondary_row_col_name,
+    $primary_row,
+    $secondary_row_list,
+    $join_row=array()
+  ) {
+    // Fetch primary row id list
+    $primary_row_id_list = $primary_table->fetchColumnIdsOrInsert($primary_row);
+    
+    foreach ($secondary_row_list as $secondary_row) {
+      // Fetch secondary row id list
+      $secondary_row_id_list = $secondary_table->fetchColumnIdsOrInsert($secondary_row);
+
+      // Insert mapping of primary/secondary column cross-product
+      foreach ($secondary_row_id_list as $secondary_row_id) {
+        foreach ($primary_row_id_list as $primary_row_id) {
+          // Assemble join row
+          $join_row = array_merge(
+            $join_row,
+            array(
+              $primary_row_col_name => $primary_row_id,
+              $secondary_row_col_name => $secondary_row_id,    
+            )
+          );
+
+          // Insert row into join table
+          $join_table->addRowWithKeys($join_row);
+        }
+      }
+    }
+  }
+
+  /**
+   * fetchColumnIdsOrInsert()
+   * - Search for specified column. If found, return id, else, insert
+   *    and return the new id. All columns must be specified.
+   * @param queried_row : Map<string:key, mixed:value>
+   * @return unsigned int : id of column in table
+   */
+  private function fetchColumnIdsOrInsert($queried_row) {
+    $num_cols_queried = sizeof($queried_row); 
+    $num_rows = sizeof($this->rowList);
+    $matching_rows = array();
+    
+    for ($row_idx=0; $row_idx < $num_rows; ++$row_idx) {
+      $row = $this->rowList[$row_idx];
+      $num_matching_cols = 0;
+
+      foreach ($queried_row as $queried_col_name => $queried_col) {
+        foreach ($row as $col_name => $col) {
+          if ($queried_col_name == $col_name && $queried_col == $col) {
+            ++$num_matching_cols;
+            break;
+          }
+        }   
+      }
+      
+      // Accumulate matching row
+      if ($num_matching_cols == $num_cols_queried) {
+        $matching_rows[] = $row_idx + 1;        
+      }
+    }
+
+    // Insert row b/c no matching rows found
+    if (sizeof($matching_rows) == 0) {
+      $this->addRowWithKeys($queried_row);
+      $matching_rows = array(sizeof($this->rowList));
+    }
+
+    return $matching_rows;
   }
 
   /**
@@ -275,12 +409,13 @@ class TableBuilder {
    */
   public function addRow($row) {
     $row_with_keys = array();
-    
     $row_size = sizeof($row);
 
-    assert(sizeof($this->rowList) == $row_size);
+    // Fail due to invalid un-keyed row size
+    assert(sizeof($this->columnMap) == $row_size);
+
     foreach ($this->columnMap as $col_name => $col) {
-      $row_with_keys[$col_name]
+      $row_with_keys[$col_name];
     }
     return $this;
   }

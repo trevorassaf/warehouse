@@ -32,22 +32,48 @@ $foo_table_builder->addUniqueColumn($name_col);
 $foo_table_builder->addUniqueColumnSet(array($name_col, $age_col));
 
 $bar_table_builder = new TableBuilder();
-$bar_table_builder->setName("bar");
+$bar_table_builder
+  ->setName("bar")
+  ->bindColumn($name_col);
 
-TableBuilder::makeOneToMany($bar_table_builder, $foo_table_builder);
+$foo_bar_join_table_name = 'foo_bar_join_table';
+$bar_fk_name = "barId";
+$foo_fk_name = "fooId";
 
-$foo_table_builder->addRow(
+$foo_bar_join_builder = TableBuilder::makeManyToMany(
+  $bar_table_builder,
+  $foo_table_builder,
+  $foo_bar_join_table_name,
+  $bar_fk_name,
+  $foo_fk_name
+);
+
+TableBuilder::loadJoinTable(
+  $bar_table_builder,
+  $foo_table_builder,
+  $foo_bar_join_builder,
+  $bar_fk_name,
+  $foo_fk_name,
+  array($name_col->getName() => 'bar-col'),
   array(
-    $name_col->getName() => "trevor",
-    $age_col->getName() => 21,
+    array(
+      $name_col->getName() => 'trevor',
+      $age_col->getName() => '21', 
+    ),
+    array(
+      $name_col->getName() => 'kalyna',
+      $age_col->getName() => '22', 
+    ),
   )
 );
 
-$foo = $foo_table_builder->build();
 $bar = $bar_table_builder->build();
+$foo = $foo_table_builder->build();
+$foo_bar_join = $foo_bar_join_builder->build();
 
 $test_db->addTable($foo);
 $test_db->addTable($bar);
+$test_db->addTable($foo_bar_join);
 
 $arch->create($test_db, "./");
 

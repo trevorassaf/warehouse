@@ -31,7 +31,7 @@ final class DataType {
     $boolDataType = null,
     $stringDataType = null,
     $timestampDataType = null,
-    $dateDataType = null;
+    $dateDataType = null,
     $foreignKeyDataType = null;
 
   private
