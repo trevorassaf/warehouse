@@ -294,7 +294,7 @@ class TableBuilder {
    * @return string : name of foreign key column
    */
   private static function genDefaultForeignKeyColumnName($referenced_table_name) {
-    return $referenced_table_name . self::FOREIGN_KEY_SUFFIX;
+    return lcfirst($referenced_table_name) . self::FOREIGN_KEY_SUFFIX;
   }
   
   /**
@@ -317,7 +317,7 @@ class TableBuilder {
       $high_lex = $table_name_a;  
     }
     
-    return "{$low_lex}_{$high_lex}_join_table";
+    return "{$low_lex}To{$high_lex}Mapping";
   }
 
   /**
@@ -365,6 +365,15 @@ class TableBuilder {
 
     $this->columnMap[$column->getName()] = $column;
     return $this;
+  }
+
+  /**
+   * getColumns()
+   * - Return map of columns.
+   * @return Map<string:key, mixed:value>
+   */
+  public function getColumns() {
+    return $this->columnMap;
   }
   
   /**
@@ -478,7 +487,7 @@ class TableBuilder {
   public function build() {
     // Fail due to unspecified table name
     assert(isset($this->name));
-
+    
     return new Table(
       $this->name,
       $this->columnMap,

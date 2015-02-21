@@ -97,27 +97,46 @@ final class SqlDbBuilder implements DbBuilder {
     // (w/o foreign keys constraints)
     foreach ($database->getTables() as $table) {
       // Table definitions
-      $create_tables_query .= $this->genCreateTableQuery(
+      $create_table_query = $this->genCreateTableQuery(
             $database->getName(),
-            $table) . "\n\n";
+            $table);
 
       // Row insertions
-      $create_tables_query .= $this->genInsertRowQueries(
+      $insert_row_query = $this->genInsertRowQueries(
         $database->getName(),
-        $table) . "\n\n";
+        $table);
+
+      if (!empty($create_table_query)) {
+        $create_table_query .= "\n\n"; 
+
+        if (empty($insert_row_query)) {
+          $create_table_query .= "\n";  
+        } else {
+          $insert_row_query .= "\n\n"; 
+        }
+      }
+
+      $create_tables_query .= $create_table_query . $insert_row_query;
     }
 
     // Create foreign key constraint queries
     foreach ($database->getTables() as $table) {
-      $create_foreign_key_queries .= $this->genCreateForeignKeyQuery(
+      $fk_query = $this->genCreateForeignKeyQuery(
           $database->getName(),
-          $table) . "\n\n"; 
+          $table
+      ); 
+
+      if (!empty($fk_query)) {
+        $fk_query .= "\n\n";
+      }
+
+      $create_foreign_key_queries .= $fk_query;
     }
 
-    return
-      $create_db_query .
-      $create_tables_query .
-      $create_foreign_key_queries;
+    return trim(
+        $create_db_query .
+        $create_tables_query .
+        $create_foreign_key_queries);
   }
 
   /**

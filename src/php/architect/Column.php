@@ -114,17 +114,13 @@ class ColumnBuilder {
     assert(isset($this->dataType));
     
     // Fail due to invalid datatype/length values
-    if ($this->dataType->allowsFirstLength()) {
-      if ($this->dataType->requiresFirstLength()) {
-        assert(isset($this->firstLength));
-      } 
+    if ($this->dataType->requiresFirstLength()) {
+      assert(isset($this->firstLength));
     } 
     
-    if ($this->dataType->allowsSecondLength()) {
-      if ($this->dataType->requiresSecondLength()) {
-        assert(isset($this->secondLength));
-      } 
-    }
+    if ($this->dataType->requiresSecondLength()) {
+      assert(isset($this->secondLength));
+    } 
 
     // Produce column
     return new Column(

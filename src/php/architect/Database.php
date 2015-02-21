@@ -73,6 +73,21 @@ class Database {
   } 
 
   /**
+   * setAndBuildTableBuilders()
+   * - Build new set of table builders and add results to db.
+   * @param table_list : List<TableBuilder>
+   * @return void
+   */
+  public function setAndBuildTableBuilders($table_builder_list) {
+    // Fail due to null table-builder-list
+    assert(isset($table_builder_list));
+
+    foreach ($table_builder_list as $table_builder) {
+      $this->addTable($table_builder->build());
+    }
+  }
+
+  /**
    * hasTable()
    * - Return true iff the db contains the specified table.
    * @param table_name : string
