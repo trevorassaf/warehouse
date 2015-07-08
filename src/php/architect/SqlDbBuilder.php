@@ -33,6 +33,7 @@ final class SqlDbBuilder implements DbBuilder {
       DataTypeName::TIMESTAMP => "TIMESTAMP",
       DataTypeName::DATE => "DATE",
       DataTypeName::FOREIGN_KEY => "BIGINT UNSIGNED",
+      DataTypeName::FLOAT => "FLOAT",
   );
   
   /**

@@ -208,6 +208,9 @@ class PhpClassBuilder {
       case DataTypeName::FOREIGN_KEY:
         $data_type_str .= 'FOREIGN_KEY';
         break;
+      case DataTypeName::FLOAT:
+        $data_type_str .= 'FLOAT';
+        break;
       default:
         die("Shouldn't happen: bad datatype: {$data_type}");
     }

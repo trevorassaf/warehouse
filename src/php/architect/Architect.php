@@ -32,7 +32,7 @@ class Architect {
     // Can't be a normal file
     assert(!is_file($path) || is_dir($path));
     
-    $warehouse_path .= "{$path}/{$database->getName()}/";
+    $warehouse_path = "{$path}/{$database->getName()}/";
 
     // Create directory
     if (!file_exists($warehouse_path)) {

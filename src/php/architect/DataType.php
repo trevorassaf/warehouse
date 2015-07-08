@@ -32,7 +32,8 @@ final class DataType {
     $stringDataType = null,
     $timestampDataType = null,
     $dateDataType = null,
-    $foreignKeyDataType = null;
+    $foreignKeyDataType = null,
+    $floatDataType = null;
 
   private
     $name,
@@ -50,6 +51,13 @@ final class DataType {
       self::$unsignedIntDataType = new self(DataTypeName::UNSIGNED_INT, DataTypeArgRequirement::NONE);
     }
     return self::$unsignedIntDataType;
+  }
+  
+  public function float() {
+    if (!isset(self::$floatDataType)) {
+      self::$floatDataType = new self(DataTypeName::FLOAT, DataTypeArgRequirement::NONE);
+    }
+    return self::$floatDataType;
   }
 
   public function bool() {
